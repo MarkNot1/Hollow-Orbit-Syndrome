@@ -1,0 +1,22 @@
+using UnityEngine;
+
+public class ChunkData
+{
+    public VoxelType[] voxels;
+    public int chunkSize = 16;
+    public int chunkHeight = 100;
+    public World worldReference;
+    public Vector3Int worldPosition;
+
+    public bool modifiedByThePlayer = false;
+
+
+    public ChunkData(int chunkSize, int chunkHeight, World world, Vector3Int worldPosition)
+    {
+        this.chunkHeight = chunkHeight;
+        this.chunkSize = chunkSize;
+        this.worldReference = world;
+        this.worldPosition = worldPosition;
+        voxels = new VoxelType[chunkSize * chunkHeight * chunkSize];
+    }
+}
