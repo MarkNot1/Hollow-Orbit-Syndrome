@@ -13,9 +13,6 @@ public class Character : MonoBehaviour
 
     public float interactionRayLength = 5;
 
-    public LayerMask groundMask;
-
-
     public bool fly = false;
 
     public Animator animator;
@@ -23,6 +20,8 @@ public class Character : MonoBehaviour
     bool isWaiting = false;
 
     public World world;
+
+    private static readonly RaycastHit[] RaycastHitsNonAlloc = new RaycastHit[32];
 
     private void Awake()
     {
@@ -35,8 +34,17 @@ public class Character : MonoBehaviour
 
     private void Start()
     {
-        playerInput.OnMouseClick += HandleMouseClick;
+        playerInput.OnDestroyBlock += TryDeleteTargetBlock;
         playerInput.OnFly += HandleFlyClick;
+    }
+
+    private void OnDestroy()
+    {
+        if (playerInput != null)
+        {
+            playerInput.OnDestroyBlock -= TryDeleteTargetBlock;
+            playerInput.OnFly -= HandleFlyClick;
+        }
     }
 
     private void HandleFlyClick()
@@ -44,58 +52,55 @@ public class Character : MonoBehaviour
         fly = !fly;
     }
 
-    void Update()
+    void FixedUpdate()
     {
         if (fly)
         {
-            //animator.SetFloat("speed", 0);
-            //animator.SetBool("isGrounded", false);
-            //animator.ResetTrigger("jump");
             playerMovement.Fly(playerInput.MovementInput, playerInput.IsJumping, playerInput.RunningPressed);
-
         }
         else
         {
-            //animator.SetBool("isGrounded", playerMovement.IsGrounded);
             if (playerMovement.IsGrounded && playerInput.IsJumping && isWaiting == false)
             {
-                //animator.SetTrigger("jump");
                 isWaiting = true;
                 StopAllCoroutines();
                 StartCoroutine(ResetWaiting());
             }
-            //animator.SetFloat("speed", playerInput.MovementInput.magnitude);
+
             playerMovement.HandleGravity(playerInput.IsJumping);
             playerMovement.Walk(playerInput.MovementInput, playerInput.RunningPressed);
-
-
         }
-
     }
+
     IEnumerator ResetWaiting()
     {
         yield return new WaitForSeconds(0.1f);
-        //animator.ResetTrigger("jump");
         isWaiting = false;
     }
 
-    private void HandleMouseClick()
+    private void TryDeleteTargetBlock()
     {
-        Ray playerRay = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
-        RaycastHit hit;
-        if (Physics.Raycast(playerRay, out hit, interactionRayLength, groundMask))
+        if (world == null || mainCamera == null)
+            return;
+
+        Ray ray = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
+        int hitCount = Physics.RaycastNonAlloc(ray, RaycastHitsNonAlloc, interactionRayLength, ~0, QueryTriggerInteraction.Ignore);
+        if (hitCount <= 0)
+            return;
+
+        int bestIndex = -1;
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < hitCount; i++)
         {
-            ModifyTerrain(hit);
+            RaycastHit h = RaycastHitsNonAlloc[i];
+            if (h.collider != null && h.collider.GetComponent<ChunkRenderer>() != null && h.distance < bestDistance)
+            {
+                bestDistance = h.distance;
+                bestIndex = i;
+            }
         }
 
+        if (bestIndex >= 0)
+            world.SetVoxel(RaycastHitsNonAlloc[bestIndex], VoxelType.Air);
     }
-
-    private void ModifyTerrain(RaycastHit hit)
-    {
-        //world.SetVoxel(hit.point, VoxelType.Air);
-    }
-
-
-
-
 }

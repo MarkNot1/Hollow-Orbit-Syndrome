@@ -9,6 +9,9 @@ public class GameManager : MonoBehaviour
 {
     public GameObject playerPrefab;
     private GameObject player;
+
+    /// <summary>Spawned player instance; null before <see cref="SpawnPlayer"/> completes.</summary>
+    public GameObject PlayerObject => player;
     public Vector3Int currentPlayerChunkPosition;
     private Vector3Int currentChunkCenter = Vector3Int.zero;
 
@@ -21,6 +24,9 @@ public class GameManager : MonoBehaviour
     public float detectionTime = 1;
     public CinemachineCamera camera_VM;
 
+    /// <summary>Chunk world keys (xz neighbors only) that currently have terrain colliders enabled. Separate from world streaming.</summary>
+    private readonly HashSet<Vector3Int> colliderGridChunks = new HashSet<Vector3Int>();
+
     [Header("Fallback spawn (used if raycast hits nothing)")]
     [SerializeField]
     private Vector3 fallbackSpawnPosition = new Vector3(8f, 25f, 8f);
@@ -29,12 +35,22 @@ public class GameManager : MonoBehaviour
     {
         if (spawnPlayerWhenWorldCreated && world != null)
             world.OnWorldCreated.AddListener(SpawnPlayer);
+        if (world != null)
+            world.OnNewChunksGenerated.AddListener(OnNewChunksGeneratedRefreshColliders);
     }
 
     private void OnDestroy()
     {
         if (world != null)
             world.OnWorldCreated.RemoveListener(SpawnPlayer);
+        if (world != null)
+            world.OnNewChunksGenerated.RemoveListener(OnNewChunksGeneratedRefreshColliders);
+    }
+
+    private void OnNewChunksGeneratedRefreshColliders()
+    {
+        if (player != null && world != null)
+            UpdatePlayerChunkCollider();
     }
 
     public void SpawnPlayer()
@@ -61,6 +77,8 @@ public class GameManager : MonoBehaviour
         Vector3 spawnPosition;
         int halfChunk = world.chunkSize / 2;
         Vector3 rayStart = new Vector3(halfChunk, 100f, halfChunk);
+        Vector3Int initialChunkPos = WorldDataHelper.ChunkPositionFromVoxelCoords(world, Vector3Int.RoundToInt(rayStart));
+        ApplyColliderGrid3x3Around(initialChunkPos);
         RaycastHit hit;
 
         if (Physics.Raycast(rayStart, Vector3.down, out hit, 120f))
@@ -87,6 +105,7 @@ public class GameManager : MonoBehaviour
     {
         if (player == null || world == null) return;
         SetCurrentChunkCoordinates();
+        UpdatePlayerChunkCollider();
         StopAllCoroutines();
         StartCoroutine(CheckIfShouldLoadNextPosition());
     }
@@ -106,7 +125,10 @@ public class GameManager : MonoBehaviour
             )
         {
             world.LoadAdditionalChunksRequest(player);
+            SetCurrentChunkCoordinates();
         }
+
+        UpdatePlayerChunkCollider();
 
         StartCoroutine(CheckIfShouldLoadNextPosition());
     }
@@ -117,5 +139,67 @@ public class GameManager : MonoBehaviour
         currentPlayerChunkPosition = WorldDataHelper.ChunkPositionFromVoxelCoords(world, Vector3Int.RoundToInt(player.transform.position));
         currentChunkCenter.x = currentPlayerChunkPosition.x + world.chunkSize / 2;
         currentChunkCenter.z = currentPlayerChunkPosition.z + world.chunkSize / 2;
+    }
+
+    private void UpdatePlayerChunkCollider()
+    {
+        if (player == null || world == null) return;
+
+        Vector3Int center = WorldDataHelper.ChunkPositionFromVoxelCoords(world, Vector3Int.RoundToInt(player.transform.position));
+        ApplyColliderGrid3x3Around(center);
+    }
+
+    private HashSet<Vector3Int> BuildColliderGrid3x3Around(Vector3Int centerChunkWorldPos)
+    {
+        var desired = new HashSet<Vector3Int>();
+        for (int ox = -1; ox <= 1; ox++)
+        {
+            for (int oz = -1; oz <= 1; oz++)
+            {
+                desired.Add(centerChunkWorldPos + new Vector3Int(ox * world.chunkSize, 0, oz * world.chunkSize));
+            }
+        }
+
+        return desired;
+    }
+
+    /// <summary>
+    /// Enables MeshColliders only for a 3×3 xz ring around the given chunk; disables the rest we had on before.
+    /// Chunk render/streaming is unchanged; this only toggles collision.
+    /// </summary>
+    private void ApplyColliderGrid3x3Around(Vector3Int centerChunkWorldPos)
+    {
+        if (world == null) return;
+
+        HashSet<Vector3Int> desired = BuildColliderGrid3x3Around(centerChunkWorldPos);
+
+        foreach (Vector3Int pos in colliderGridChunks)
+        {
+            if (!desired.Contains(pos))
+            {
+                ChunkRenderer chunk = WorldDataHelper.GetChunk(world, pos);
+                if (chunk != null)
+                    chunk.SetCollisionActive(false);
+            }
+        }
+
+        foreach (Vector3Int pos in desired)
+        {
+            ChunkRenderer chunk = WorldDataHelper.GetChunk(world, pos);
+            if (chunk != null)
+                chunk.SetCollisionActive(true);
+        }
+
+        colliderGridChunks.Clear();
+        foreach (Vector3Int p in desired)
+            colliderGridChunks.Add(p);
+    }
+
+    /// <summary>For debug overlay: copies chunk world keys that currently have terrain collision enabled.</summary>
+    public void CopyActiveColliderChunkKeysTo(List<Vector3Int> destination)
+    {
+        destination.Clear();
+        foreach (Vector3Int p in colliderGridChunks)
+            destination.Add(p);
     }
 }

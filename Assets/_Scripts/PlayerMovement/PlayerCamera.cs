@@ -11,12 +11,16 @@ public class PlayerCamera : MonoBehaviour
 
     [SerializeField]
     private PlayerInput playerInput;
+    private Rigidbody playerBodyRb;
+    private float pendingYaw;
 
     float verticalRotation = 0f;
 
     private void Awake()
     {
         playerInput = GetComponentInParent<PlayerInput>();
+        if (playerBody != null)
+            playerBodyRb = playerBody.GetComponent<Rigidbody>();
     }
 
     private void Start()
@@ -24,7 +28,7 @@ public class PlayerCamera : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
     }
 
-    private void Update()
+    private void LateUpdate()
     {
         if (playerInput == null) return;
         // MousePosition is pointer delta (pixels) from new Input System; scale by sensitivity only (no Time.deltaTime).
@@ -35,8 +39,25 @@ public class PlayerCamera : MonoBehaviour
         verticalRotation = Mathf.Clamp(verticalRotation, -90f, 90f);
 
         transform.localRotation = Quaternion.Euler(verticalRotation, 0f, 0f);
-        if (playerBody != null)
-            playerBody.Rotate(Vector3.up * mouseX);
+        pendingYaw += mouseX;
+    }
+
+    private void FixedUpdate()
+    {
+        if (Mathf.Approximately(pendingYaw, 0f))
+            return;
+
+        if (playerBodyRb != null)
+        {
+            Quaternion yawDelta = Quaternion.Euler(0f, pendingYaw, 0f);
+            playerBodyRb.MoveRotation(playerBodyRb.rotation * yawDelta);
+        }
+        else if (playerBody != null)
+        {
+            playerBody.Rotate(Vector3.up * pendingYaw);
+        }
+
+        pendingYaw = 0f;
     }
 
 }

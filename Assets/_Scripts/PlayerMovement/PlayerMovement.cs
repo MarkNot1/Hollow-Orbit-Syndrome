@@ -18,11 +18,10 @@ public class PlayerMovement : MonoBehaviour
 
     [Header("Grounded check parameters:")]
     [SerializeField]
-    private LayerMask groundMask;
-    [SerializeField]
     private float rayDistance = 1;
     [field: SerializeField]
     public bool IsGrounded { get; private set; }
+    private PhysicsMaterial glideMaterial;
 
     private void Awake()
     {
@@ -33,6 +32,20 @@ public class PlayerMovement : MonoBehaviour
             rb.useGravity = false; // we apply gravity in HandleGravity to match previous behaviour
             rb.freezeRotation = true;   // prevent tipping over
             rb.interpolation = RigidbodyInterpolation.Interpolate; // smoother movement
+        }
+
+        Collider playerCollider = GetComponent<Collider>();
+        if (playerCollider != null)
+        {
+            glideMaterial = new PhysicsMaterial("PlayerGlide")
+            {
+                dynamicFriction = 0f,
+                staticFriction = 0f,
+                bounciness = 0f,
+                frictionCombine = PhysicsMaterialCombine.Minimum,
+                bounceCombine = PhysicsMaterialCombine.Minimum
+            };
+            playerCollider.sharedMaterial = glideMaterial;
         }
     }
 
@@ -96,7 +109,7 @@ public class PlayerMovement : MonoBehaviour
 
     private void Update()
     {
-        IsGrounded = Physics.Raycast(transform.position, Vector3.down, rayDistance, groundMask);
+        IsGrounded = Physics.Raycast(transform.position, Vector3.down, rayDistance, ~0, QueryTriggerInteraction.Ignore);
     }
 
     private void OnDrawGizmos()

@@ -7,7 +7,7 @@ using UnityEngine.Events;
 public class World : MonoBehaviour
 {
     public int mapSizeInChunks = 6;
-    public int chunkSize = 16, chunkHeight = 100;
+    public int chunkSize = 32, chunkHeight = 100;
     public int chunkDrawingRange = 8;
 
     public GameObject chunkPrefab;

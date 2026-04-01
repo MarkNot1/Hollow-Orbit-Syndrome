@@ -10,10 +10,12 @@ public class PlayerInput : MonoBehaviour
 {
     [Header("Input Actions")]
     [SerializeField]
-    [Tooltip("Assign the InputSystem_Actions asset. Must contain a 'Player' action map with: Move, Look, Jump, Sprint, Attack, Fly.")]
+    [Tooltip("Assign the InputSystem_Actions asset. Must contain a 'Player' action map with: Move, Look, Jump, Sprint, Fly, DestroyBlock (optional).")]
     private InputActionAsset inputActions;
 
-    public event Action OnMouseClick, OnFly;
+    public event Action OnFly;
+    /// <summary>Fired when <c>DestroyBlock</c> is performed (e.g. right mouse).</summary>
+    public event Action OnDestroyBlock;
     public bool RunningPressed { get; private set; }
     public Vector3 MovementInput { get; private set; }
     /// <summary>Mouse/look delta this frame (pixels). With new Input System this is pointer delta.</summary>
@@ -45,13 +47,13 @@ public class PlayerInput : MonoBehaviour
         _lookAction = _playerMap.FindAction("Look");
         _jumpAction = _playerMap.FindAction("Jump");
         _sprintAction = _playerMap.FindAction("Sprint");
-        InputAction attackAction = _playerMap.FindAction("Attack");
         InputAction flyAction = _playerMap.FindAction("Fly");
+        InputAction destroyBlockAction = _playerMap.FindAction("DestroyBlock");
 
-        if (attackAction != null)
-            attackAction.performed += OnAttackPerformed;
         if (flyAction != null)
             flyAction.performed += OnFlyPerformed;
+        if (destroyBlockAction != null)
+            destroyBlockAction.performed += OnDestroyBlockPerformed;
     }
 
     private void OnEnable()
@@ -64,18 +66,18 @@ public class PlayerInput : MonoBehaviour
         _playerMap?.Disable();
         if (_playerMap != null)
         {
-            InputAction attackAction = _playerMap.FindAction("Attack");
             InputAction flyAction = _playerMap.FindAction("Fly");
-            if (attackAction != null)
-                attackAction.performed -= OnAttackPerformed;
+            InputAction destroyBlockAction = _playerMap.FindAction("DestroyBlock");
             if (flyAction != null)
                 flyAction.performed -= OnFlyPerformed;
+            if (destroyBlockAction != null)
+                destroyBlockAction.performed -= OnDestroyBlockPerformed;
         }
     }
 
-    private void OnAttackPerformed(InputAction.CallbackContext _)
+    private void OnDestroyBlockPerformed(InputAction.CallbackContext _)
     {
-        OnMouseClick?.Invoke();
+        OnDestroyBlock?.Invoke();
     }
 
     private void OnFlyPerformed(InputAction.CallbackContext _)

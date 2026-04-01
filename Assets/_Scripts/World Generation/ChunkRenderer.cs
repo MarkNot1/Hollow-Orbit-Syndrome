@@ -14,6 +14,7 @@ public class ChunkRenderer : MonoBehaviour
     MeshFilter meshFilter;
     MeshCollider meshCollider;
     Mesh mesh;
+    Mesh collisionMesh;
     public bool showGizmo = false;
 
     public ChunkData ChunkData { get; private set; }
@@ -35,6 +36,9 @@ public class ChunkRenderer : MonoBehaviour
         meshFilter = GetComponent<MeshFilter>();
         meshCollider = GetComponent<MeshCollider>();
         mesh = meshFilter.mesh;
+        collisionMesh = new Mesh();
+        meshCollider.convex = false;
+        meshCollider.enabled = false;
     }
 
     public void InitializeChunk(ChunkData data)
@@ -55,15 +59,23 @@ public class ChunkRenderer : MonoBehaviour
 
         mesh.uv = meshData.uvs.Concat(meshData.waterMesh.uvs).ToArray();
         mesh.RecalculateNormals();
-   
-        meshCollider.sharedMesh = null;
-        Mesh collisionMesh = new Mesh();
 
-        collisionMesh.vertices = meshData.colliderVertices.ToArray();
-        collisionMesh.triangles = meshData.colliderTriangles.ToArray();
+        meshCollider.sharedMesh = null;
+        collisionMesh.Clear();
+        collisionMesh.vertices = meshData.vertices.ToArray();
+        collisionMesh.triangles = meshData.triangles.ToArray();
         collisionMesh.RecalculateNormals();
 
         meshCollider.sharedMesh = collisionMesh;
+    }
+
+    public void SetCollisionActive(bool isActive)
+    {
+        if (meshCollider != null)
+        {
+            meshCollider.convex = false;
+            meshCollider.enabled = isActive;
+        }
     }
 
     public void UpdateChunk()
