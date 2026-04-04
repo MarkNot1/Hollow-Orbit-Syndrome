@@ -76,8 +76,8 @@ public class GameManager : MonoBehaviour
 
         Vector3 spawnPosition;
         int halfChunk = world.chunkSize / 2;
-        Vector3 rayStart = new Vector3(halfChunk, 100f, halfChunk);
-        Vector3Int initialChunkPos = WorldDataHelper.ChunkPositionFromVoxelCoords(world, Vector3Int.RoundToInt(rayStart));
+        Vector3 rayStart = new Vector3(halfChunk * VoxelMetrics.Size, 100f, halfChunk * VoxelMetrics.Size);
+        Vector3Int initialChunkPos = WorldDataHelper.ChunkPositionFromVoxelCoords(world, VoxelMetrics.WorldToVoxelCoord(rayStart));
         ApplyColliderGrid3x3Around(initialChunkPos);
         RaycastHit hit;
 
@@ -118,10 +118,13 @@ public class GameManager : MonoBehaviour
 
         if (player == null || world == null) yield break;
 
+        Vector3Int playerVoxel = VoxelMetrics.WorldToVoxelCoord(player.transform.position);
+        int centerVx = currentPlayerChunkPosition.x + world.chunkSize / 2;
+        int centerVz = currentPlayerChunkPosition.z + world.chunkSize / 2;
         if (
-            Mathf.Abs(currentChunkCenter.x - player.transform.position.x) > world.chunkSize ||
-            Mathf.Abs(currentChunkCenter.z - player.transform.position.z) > world.chunkSize ||
-            Mathf.Abs(currentPlayerChunkPosition.y - player.transform.position.y) > world.chunkHeight
+            Mathf.Abs(centerVx - playerVoxel.x) > world.chunkSize ||
+            Mathf.Abs(centerVz - playerVoxel.z) > world.chunkSize ||
+            Mathf.Abs(currentPlayerChunkPosition.y - playerVoxel.y) > world.chunkHeight
             )
         {
             world.LoadAdditionalChunksRequest(player);
@@ -136,7 +139,7 @@ public class GameManager : MonoBehaviour
     private void SetCurrentChunkCoordinates()
     {
         if (player == null || world == null) return;
-        currentPlayerChunkPosition = WorldDataHelper.ChunkPositionFromVoxelCoords(world, Vector3Int.RoundToInt(player.transform.position));
+        currentPlayerChunkPosition = WorldDataHelper.ChunkPositionFromVoxelCoords(world, VoxelMetrics.WorldToVoxelCoord(player.transform.position));
         currentChunkCenter.x = currentPlayerChunkPosition.x + world.chunkSize / 2;
         currentChunkCenter.z = currentPlayerChunkPosition.z + world.chunkSize / 2;
     }
@@ -145,7 +148,7 @@ public class GameManager : MonoBehaviour
     {
         if (player == null || world == null) return;
 
-        Vector3Int center = WorldDataHelper.ChunkPositionFromVoxelCoords(world, Vector3Int.RoundToInt(player.transform.position));
+        Vector3Int center = WorldDataHelper.ChunkPositionFromVoxelCoords(world, VoxelMetrics.WorldToVoxelCoord(player.transform.position));
         ApplyColliderGrid3x3Around(center);
     }
 

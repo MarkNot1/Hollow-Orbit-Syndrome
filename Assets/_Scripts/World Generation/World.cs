@@ -64,7 +64,7 @@ public class World : MonoBehaviour
         {
             ChunkData data = worldData.chunkDataDictionary[pos];
             MeshData meshData = Chunk.GetChunkMeshData(data);
-            GameObject chunkObject = Instantiate(chunkPrefab, data.worldPosition, Quaternion.identity);
+            GameObject chunkObject = Instantiate(chunkPrefab, VoxelMetrics.ChunkKeyToWorldOrigin(data.worldPosition), Quaternion.identity);
             ChunkRenderer chunkRenderer = chunkObject.GetComponent<ChunkRenderer>();
             worldData.chunkDictionary.Add(data.worldPosition, chunkRenderer);
             chunkRenderer.InitializeChunk(data);
@@ -114,26 +114,9 @@ public class World : MonoBehaviour
         return true;
     }
 
-    private Vector3Int GetVoxelPos(RaycastHit hit)
+    private static Vector3Int GetVoxelPos(RaycastHit hit)
     {
-        Vector3 pos = new Vector3(
-             GetVoxelPositionIn(hit.point.x, hit.normal.x),
-             GetVoxelPositionIn(hit.point.y, hit.normal.y),
-             GetVoxelPositionIn(hit.point.z, hit.normal.z)
-             );
-
-        return Vector3Int.RoundToInt(pos);
-    }
-
-    private float GetVoxelPositionIn(float pos, float normal)
-    {
-        if (Mathf.Abs(pos % 1) == 0.5f)
-        {
-            pos -= (normal / 2);
-        }
-
-
-        return (float)pos;
+        return VoxelMetrics.WorldHitToTargetVoxelIndex(hit);
     }
 
     internal void RemoveChunk(ChunkRenderer chunk)
@@ -167,7 +150,7 @@ public class World : MonoBehaviour
     internal void LoadAdditionalChunksRequest(GameObject player)
     {
         Debug.Log("Load more chunks");
-        GenerateWorld(Vector3Int.RoundToInt(player.transform.position));
+        GenerateWorld(VoxelMetrics.WorldToVoxelCoord(player.transform.position));
         OnNewChunksGenerated?.Invoke();
     }
 

@@ -160,7 +160,7 @@ public class debug_Menu : MonoBehaviour
 
     private static void AppendLocalColliderGrid3x3(List<Vector3Int> dst, World worldRef, Vector3 playerWorldPos)
     {
-        Vector3Int center = WorldDataHelper.ChunkPositionFromVoxelCoords(worldRef, Vector3Int.RoundToInt(playerWorldPos));
+        Vector3Int center = WorldDataHelper.ChunkPositionFromVoxelCoords(worldRef, VoxelMetrics.WorldToVoxelCoord(playerWorldPos));
         int cs = worldRef.chunkSize;
         int ch = worldRef.chunkHeight;
         for (int oy = -1; oy <= 1; oy++)
@@ -171,12 +171,12 @@ public class debug_Menu : MonoBehaviour
 
     private static void AppendWireAlignedBox(List<Vector3> verts, List<int> indices, Vector3Int origin, int size, int height, float inflate)
     {
-        float oo = inflate * 0.5f;
+        float s = VoxelMetrics.Size;
         float hpad = inflate;
-        Vector3 o = new Vector3(origin.x - oo, origin.y - hpad * 0.5f, origin.z - oo);
-        Vector3 sx = new Vector3(size + inflate, 0f, 0f);
-        Vector3 sy = new Vector3(0f, height + hpad, 0f);
-        Vector3 sz = new Vector3(0f, 0f, size + inflate);
+        Vector3 o = new Vector3(origin.x - 0.5f, origin.y - 0.5f, origin.z - 0.5f) * s;
+        Vector3 sx = new Vector3(size * s + inflate, 0f, 0f);
+        Vector3 sy = new Vector3(0f, height * s + hpad, 0f);
+        Vector3 sz = new Vector3(0f, 0f, size * s + inflate);
 
         Vector3 c000 = o;
         Vector3 c100 = o + sx;
@@ -299,8 +299,7 @@ public class debug_Menu : MonoBehaviour
             : null;
         if (player != null && world != null)
         {
-            Vector3 p = player.position;
-            Vector3Int voxel = Vector3Int.RoundToInt(p);
+            Vector3Int voxel = VoxelMetrics.WorldToVoxelCoord(player.position);
             Vector3Int chunkPos = WorldDataHelper.ChunkPositionFromVoxelCoords(world, voxel);
             sb.Append("XYZ: ").Append(voxel.x).Append(" / ").Append(voxel.y).Append(" / ").AppendLine(voxel.z.ToString());
             sb.Append("Chunk: ").Append(chunkPos.x).Append(" ").Append(chunkPos.y).Append(" ").AppendLine(chunkPos.z.ToString());

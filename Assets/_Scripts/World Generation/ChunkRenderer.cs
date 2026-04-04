@@ -31,6 +31,25 @@ public class ChunkRenderer : MonoBehaviour
         }
     }
 
+    static PhysicsMaterial s_voxelTerrainMaterial;
+
+    static PhysicsMaterial GetVoxelTerrainMaterial()
+    {
+        if (s_voxelTerrainMaterial == null)
+        {
+            s_voxelTerrainMaterial = new PhysicsMaterial("VoxelTerrain")
+            {
+                bounciness = 0f,
+                dynamicFriction = 0.55f,
+                staticFriction = 0.55f,
+                frictionCombine = PhysicsMaterialCombine.Average,
+                bounceCombine = PhysicsMaterialCombine.Minimum
+            };
+        }
+
+        return s_voxelTerrainMaterial;
+    }
+
     private void Awake()
     {
         meshFilter = GetComponent<MeshFilter>();
@@ -38,6 +57,7 @@ public class ChunkRenderer : MonoBehaviour
         mesh = meshFilter.mesh;
         collisionMesh = new Mesh();
         meshCollider.convex = false;
+        meshCollider.sharedMaterial = GetVoxelTerrainMaterial();
         meshCollider.enabled = false;
     }
 
@@ -101,7 +121,9 @@ public class ChunkRenderer : MonoBehaviour
                 else
                     Gizmos.color = new Color(1, 0, 1, 0.4f);
 
-                Gizmos.DrawCube(transform.position + new Vector3(ChunkData.chunkSize / 2f, ChunkData.chunkHeight / 2f, ChunkData.chunkSize / 2f), new Vector3(ChunkData.chunkSize, ChunkData.chunkHeight, ChunkData.chunkSize));
+                float s = VoxelMetrics.Size;
+                Vector3 ext = new Vector3(ChunkData.chunkSize * s, ChunkData.chunkHeight * s, ChunkData.chunkSize * s);
+                Gizmos.DrawCube(transform.position + (ext - Vector3.one * s) * 0.5f, ext);
             }
         }
     }

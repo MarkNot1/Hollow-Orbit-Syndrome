@@ -18,10 +18,21 @@ public class PlayerMovement : MonoBehaviour
 
     [Header("Grounded check parameters:")]
     [SerializeField]
-    private float rayDistance = 1;
+    [Tooltip("How far below the probe we search for surfaces (meters). Long casts can hit geometry far below; see Ground snap distance.")]
+    private float rayDistance = 0.35f;
+    [SerializeField]
+    [Tooltip("Start the cast slightly above the collider bottom to avoid starting inside floor mesh.")]
+    private float groundProbeSkin = 0.06f;
+    [SerializeField]
+    [Tooltip("Only treat as grounded (via ray) if the closest hit is within this distance from the probe origin. Keep small so we do not \"rest\" in mid-air.")]
+    private float groundSnapDistance = 0.14f;
     [field: SerializeField]
     public bool IsGrounded { get; private set; }
     private PhysicsMaterial glideMaterial;
+    private Collider selfCollider;
+    /// <summary>Set during the last physics step if a solid contact supports the player from below.</summary>
+    private bool physicsGroundedLatch;
+    private static readonly RaycastHit[] GroundHits = new RaycastHit[12];
 
     private void Awake()
     {
@@ -34,8 +45,8 @@ public class PlayerMovement : MonoBehaviour
             rb.interpolation = RigidbodyInterpolation.Interpolate; // smoother movement
         }
 
-        Collider playerCollider = GetComponent<Collider>();
-        if (playerCollider != null)
+        selfCollider = GetComponent<Collider>();
+        if (selfCollider != null)
         {
             glideMaterial = new PhysicsMaterial("PlayerGlide")
             {
@@ -45,8 +56,63 @@ public class PlayerMovement : MonoBehaviour
                 frictionCombine = PhysicsMaterialCombine.Minimum,
                 bounceCombine = PhysicsMaterialCombine.Minimum
             };
-            playerCollider.sharedMaterial = glideMaterial;
+            selfCollider.sharedMaterial = glideMaterial;
         }
+    }
+
+    /// <summary>
+    /// Call from <see cref="FixedUpdate"/> before jump/gravity so <see cref="IsGrounded"/> matches this physics step.
+    /// Any non-trigger collider below the feet counts as ground (full layer mask).
+    /// </summary>
+    public void RefreshGroundState()
+    {
+        bool fromPhysics = physicsGroundedLatch;
+        physicsGroundedLatch = false;
+        IsGrounded = ComputeGrounded() || fromPhysics;
+    }
+
+    private void OnCollisionStay(Collision collision)
+    {
+        if (collision.collider == null || collision.collider.isTrigger)
+            return;
+        if (selfCollider != null && collision.collider == selfCollider)
+            return;
+
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            Vector3 n = collision.GetContact(i).normal;
+            if (Vector3.Dot(n, Vector3.up) > 0.25f)
+            {
+                physicsGroundedLatch = true;
+                return;
+            }
+        }
+    }
+
+    private bool ComputeGrounded()
+    {
+        const int mask = ~0;
+
+        if (selfCollider == null)
+            return Physics.Raycast(transform.position, Vector3.down, rayDistance, mask, QueryTriggerInteraction.Ignore);
+
+        float skin = Mathf.Max(0.01f, groundProbeSkin);
+        Vector3 origin = new Vector3(selfCollider.bounds.center.x, selfCollider.bounds.min.y + skin, selfCollider.bounds.center.z);
+        float maxDist = skin + rayDistance;
+
+        int n = Physics.RaycastNonAlloc(origin, Vector3.down, GroundHits, maxDist, mask, QueryTriggerInteraction.Ignore);
+        float closest = float.MaxValue;
+        for (int i = 0; i < n; i++)
+        {
+            RaycastHit h = GroundHits[i];
+            Collider c = h.collider;
+            if (c == null || c == selfCollider || c.isTrigger)
+                continue;
+            if (h.distance < closest)
+                closest = h.distance;
+        }
+
+        return closest <= groundSnapDistance;
     }
 
     private Vector3 GetMovementDirection(Vector3 movementInput)
@@ -83,15 +149,15 @@ public class PlayerMovement : MonoBehaviour
     {
         if (rb == null) return;
 
-        if (IsGrounded && playerVelocity.y < 0)
-            playerVelocity.y = 0f;
-
         if (isJumping && IsGrounded)
             AddJumpForce();
 
-        ApplyGravityForce();
+        // When supported, do not apply gravity — a tiny downward vy each frame was fighting the solver and caused hover / slow settle.
+        if (IsGrounded && playerVelocity.y <= 0f)
+            playerVelocity.y = 0f;
+        else
+            ApplyGravityForce();
 
-        // keep current horizontal velocity, only change vertical
         Vector3 vel = rb.linearVelocity;
         rb.linearVelocity = new Vector3(vel.x, playerVelocity.y, vel.z);
     }
@@ -107,13 +173,20 @@ public class PlayerMovement : MonoBehaviour
         playerVelocity.y = Mathf.Clamp(playerVelocity.y, gravityValue, 10);
     }
 
-    private void Update()
-    {
-        IsGrounded = Physics.Raycast(transform.position, Vector3.down, rayDistance, ~0, QueryTriggerInteraction.Ignore);
-    }
-
     private void OnDrawGizmos()
     {
-        Gizmos.DrawRay(transform.position, Vector3.down * rayDistance);
+        Collider c = selfCollider != null ? selfCollider : GetComponent<Collider>();
+        if (c != null)
+        {
+            float skin = Mathf.Max(0.01f, groundProbeSkin);
+            Vector3 o = new Vector3(c.bounds.center.x, c.bounds.min.y + skin, c.bounds.center.z);
+            float castLen = skin + rayDistance;
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawRay(o, Vector3.down * castLen);
+            Gizmos.color = Color.green;
+            Gizmos.DrawRay(o, Vector3.down * Mathf.Min(castLen, groundSnapDistance));
+        }
+        else
+            Gizmos.DrawRay(transform.position, Vector3.down * rayDistance);
     }
 }

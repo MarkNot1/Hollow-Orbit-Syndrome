@@ -54,6 +54,8 @@ public class Character : MonoBehaviour
 
     void FixedUpdate()
     {
+        playerMovement.RefreshGroundState();
+
         if (fly)
         {
             playerMovement.Fly(playerInput.MovementInput, playerInput.IsJumping, playerInput.RunningPressed);
