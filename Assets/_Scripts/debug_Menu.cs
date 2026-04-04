@@ -162,9 +162,11 @@ public class debug_Menu : MonoBehaviour
     {
         Vector3Int center = WorldDataHelper.ChunkPositionFromVoxelCoords(worldRef, Vector3Int.RoundToInt(playerWorldPos));
         int cs = worldRef.chunkSize;
+        int ch = worldRef.chunkHeight;
+        for (int oy = -1; oy <= 1; oy++)
         for (int ox = -1; ox <= 1; ox++)
         for (int oz = -1; oz <= 1; oz++)
-            dst.Add(center + new Vector3Int(ox * cs, 0, oz * cs));
+            dst.Add(center + new Vector3Int(ox * cs, oy * ch, oz * cs));
     }
 
     private static void AppendWireAlignedBox(List<Vector3> verts, List<int> indices, Vector3Int origin, int size, int height, float inflate)
@@ -303,7 +305,7 @@ public class debug_Menu : MonoBehaviour
             sb.Append("XYZ: ").Append(voxel.x).Append(" / ").Append(voxel.y).Append(" / ").AppendLine(voxel.z.ToString());
             sb.Append("Chunk: ").Append(chunkPos.x).Append(" ").Append(chunkPos.y).Append(" ").AppendLine(chunkPos.z.ToString());
             sb.AppendLine("Green: loaded chunk borders (depth-tested)");
-            sb.AppendLine("Magenta: collision 3×3 (slightly inflated)");
+            sb.AppendLine("Magenta: collision 3×3×3 (slightly inflated)");
         }
         else
         {

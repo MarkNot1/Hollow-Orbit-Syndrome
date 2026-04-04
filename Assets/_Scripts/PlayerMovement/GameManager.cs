@@ -24,7 +24,7 @@ public class GameManager : MonoBehaviour
     public float detectionTime = 1;
     public CinemachineCamera camera_VM;
 
-    /// <summary>Chunk world keys (xz neighbors only) that currently have terrain colliders enabled. Separate from world streaming.</summary>
+    /// <summary>Chunk world keys (3×3×3 neighbourhood) that currently have terrain colliders enabled. Separate from world streaming.</summary>
     private readonly HashSet<Vector3Int> colliderGridChunks = new HashSet<Vector3Int>();
 
     [Header("Fallback spawn (used if raycast hits nothing)")]
@@ -152,11 +152,16 @@ public class GameManager : MonoBehaviour
     private HashSet<Vector3Int> BuildColliderGrid3x3Around(Vector3Int centerChunkWorldPos)
     {
         var desired = new HashSet<Vector3Int>();
-        for (int ox = -1; ox <= 1; ox++)
+        int cs = world.chunkSize;
+        int ch = world.chunkHeight;
+        for (int oy = -1; oy <= 1; oy++)
         {
-            for (int oz = -1; oz <= 1; oz++)
+            for (int ox = -1; ox <= 1; ox++)
             {
-                desired.Add(centerChunkWorldPos + new Vector3Int(ox * world.chunkSize, 0, oz * world.chunkSize));
+                for (int oz = -1; oz <= 1; oz++)
+                {
+                    desired.Add(centerChunkWorldPos + new Vector3Int(ox * cs, oy * ch, oz * cs));
+                }
             }
         }
 
@@ -164,7 +169,7 @@ public class GameManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Enables MeshColliders only for a 3×3 xz ring around the given chunk; disables the rest we had on before.
+    /// Enables MeshColliders for a 3×3×3 neighbourhood (xz and vertical chunk layers) around the player chunk.
     /// Chunk render/streaming is unchanged; this only toggles collision.
     /// </summary>
     private void ApplyColliderGrid3x3Around(Vector3Int centerChunkWorldPos)

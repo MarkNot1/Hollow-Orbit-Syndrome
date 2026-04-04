@@ -1015,6 +1015,57 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1305025048}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1170934091
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1170934093}
+  - component: {fileID: 1170934092}
+  m_Layer: 0
+  m_Name: DebugMenuManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1170934092
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1170934091}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9a996b248554e9940814a4ff9921cb23, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::debug_Menu
+  world: {fileID: 1634700859}
+  gameManager: {fileID: 197864316}
+  toggleKey: 96
+  chunkBorderColor: {r: 0.7830189, g: 0.63528824, b: 0.16620687, a: 0.50980395}
+  collisionBorderColor: {r: 0.8980392, g: 0.07058823, b: 0.6997337, a: 0.50980395}
+  collisionOutlineInflate: 0.04
+  overlayFontSize: 14
+--- !u!4 &1170934093
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1170934091}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -141.00821, y: 0, z: 56.45303}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1223480469
 GameObject:
   m_ObjectHideFlags: 0
@@ -1266,6 +1317,18 @@ MonoBehaviour:
         m_TargetAssemblyTypeName: World, Assembly-CSharp
         m_MethodName: GenerateWorld
         m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
+      - m_Target: {fileID: 1311240815}
+        m_TargetAssemblyTypeName: UnityEngine.UI.Button, UnityEngine.UI
+        m_MethodName: set_interactable
+        m_Mode: 6
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
@@ -1527,9 +1590,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::World
   mapSizeInChunks: 6
-  chunkSize: 32
+  chunkSize: 16
   chunkHeight: 100
-  chunkDrawingRange: 8
+  chunkDrawingRange: 3
   chunkPrefab: {fileID: 5975047598341480873, guid: 8e8194e98d85e934591fe4466be767a4, type: 3}
   terrainGenerator: {fileID: 1283086460}
   mapSeedOffset: {x: 0, y: 0}
@@ -1592,3 +1655,4 @@ SceneRoots:
   - {fileID: 1283086461}
   - {fileID: 60055901}
   - {fileID: 197864317}
+  - {fileID: 1170934093}

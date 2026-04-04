@@ -12,29 +12,16 @@ public class MetalLayerHandler : VoxelLayerHandler
 
     protected override bool tryHandling(ChunkData chunckData, int x, int y, int z, int surfaceHeightNoise, Vector2Int mapSeedOffset)
     {
-        if (chunckData.worldPosition.y > surfaceHeightNoise)
-        {
+        int worldY = chunckData.worldPosition.y + y;
+        if (worldY > surfaceHeightNoise)
             return false;
-        }
 
         metalNoiseSettings.worldOffset = mapSeedOffset;
-        //float metalNoiseValue = MyNoise.OctavePerlin(chunckData.worldPosition.x + x, chunckData.worldPosition.z + z, metalNoiseSettings);
-
         float metalNoiseValue = domainWarping.GenerateDomainNoise(chunckData.worldPosition.x + x, chunckData.worldPosition.z + z, metalNoiseSettings);
 
-        int endPosition = surfaceHeightNoise;
-        if (chunckData.worldPosition.y < 0)
-        {
-            endPosition = chunckData.worldPosition.y + chunckData.chunkHeight;
-        }
-    
         if (metalNoiseValue > metalThreshold)
         {
-            for (int i = chunckData.worldPosition.y; i < endPosition; i++)
-            {
-                Vector3Int pos = new Vector3Int(x, i, z);
-                Chunk.SetVoxel(chunckData,pos , VoxelType.Metal);
-            }
+            Chunk.SetVoxel(chunckData, new Vector3Int(x, y, z), VoxelType.Metal);
             return true;
         }
         return false;

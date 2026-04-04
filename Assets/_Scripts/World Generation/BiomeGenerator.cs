@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using NUnit.Framework;
 using UnityEngine;
 
 public class BiomeGenerator : MonoBehaviour
@@ -21,17 +20,14 @@ public class BiomeGenerator : MonoBehaviour
         biomeNoiseSettings.worldOffset = mapSeedOffset;
         int groundPosition = GetSurfaceHeightNoise(data.worldPosition.x + x, data.worldPosition.z + z, data.chunkHeight);
 
-        for (int y = data.worldPosition.y; y < data.worldPosition.y + data.chunkHeight; y++)
-        {
-            startLayerHandler.Handle(data, x, y, z, groundPosition, mapSeedOffset);
-        }
+        // Handlers use local Y (0..chunkHeight-1); compare to surface using world Y inside each handler.
+        for (int localY = 0; localY < data.chunkHeight; localY++)
+            startLayerHandler.Handle(data, x, localY, z, groundPosition, mapSeedOffset);
 
         foreach (var layer in aditionalLayerHandlers)
         {
-            for (int y = 0; y < data.chunkHeight; y++)
-            {
-                layer.Handle(data, x, data.worldPosition.y, z, groundPosition, mapSeedOffset);
-            }
+            for (int localY = 0; localY < data.chunkHeight; localY++)
+                layer.Handle(data, x, localY, z, groundPosition, mapSeedOffset);
         }
 
         return data;
