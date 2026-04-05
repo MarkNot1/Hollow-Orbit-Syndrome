@@ -59,11 +59,15 @@ public class World : MonoBehaviour
             ChunkData newData = terrainGenerator.GenerateChunkData(data, mapSeedOffset);
             worldData.chunkDataDictionary.Add(pos, newData);
         }
-
-        foreach (var pos in worldGenerationData.chunkPositionsToCreate)
+        
+        Dictionary<Vector3Int, MeshData> meshDataDictionary = new Dictionary<Vector3Int, MeshData>();
+        foreach (Vector3Int pos in worldGenerationData.chunkPositionsToCreate)
         {
             ChunkData data = worldData.chunkDataDictionary[pos];
             MeshData meshData = Chunk.GetChunkMeshData(data);
+            meshDataDictionary.Add(pos, meshData);
+
+
             GameObject chunkObject = Instantiate(chunkPrefab, VoxelMetrics.ChunkKeyToWorldOrigin(data.worldPosition), Quaternion.identity);
             ChunkRenderer chunkRenderer = chunkObject.GetComponent<ChunkRenderer>();
             worldData.chunkDictionary.Add(data.worldPosition, chunkRenderer);
@@ -84,6 +88,22 @@ public class World : MonoBehaviour
         //}
 
         OnWorldCreated?.Invoke();
+    }
+
+    IEnumerator chunckCreationCoroutine(Dictionary<Vector3Int, MeshData> meshDataDictionary)
+    {
+        foreach (var item in meshDataDictionary)
+        {
+            CreateChunk(worldData, item.Key, item.Value);
+            yield return new WaitForEndOfFrame();
+        }
+
+        if (IsWorldCreated == false)
+        {
+            IsWorldCreated = true;
+            OnWorldCreated?.Invoke();
+        }
+            
     }
 
     internal bool SetVoxel(RaycastHit hit, VoxelType voxelType)

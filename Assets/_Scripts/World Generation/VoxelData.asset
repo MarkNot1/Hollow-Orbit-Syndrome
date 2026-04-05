@@ -21,27 +21,32 @@ MonoBehaviour:
     side: {x: 0, y: 2}
     isSolid: 1
     generatesCollider: 0
+    isSmoothable: 1
   - voxelType: 9
     up: {x: 0, y: 0}
     down: {x: 0, y: 0}
     side: {x: 0, y: 0}
     isSolid: 1
     generatesCollider: 0
+    isSmoothable: 0
   - voxelType: 4
     up: {x: 0, y: 3}
     down: {x: 0, y: 3}
     side: {x: 0, y: 3}
     isSolid: 0
     generatesCollider: 0
+    isSmoothable: 0
   - voxelType: 1
     up: {x: 0, y: 3}
     down: {x: 0, y: 3}
     side: {x: 0, y: 3}
     isSolid: 0
     generatesCollider: 0
+    isSmoothable: 0
   - voxelType: 10
     up: {x: 2, y: 0}
     down: {x: 2, y: 0}
     side: {x: 2, y: 0}
     isSolid: 1
     generatesCollider: 0
+    isSmoothable: 0
