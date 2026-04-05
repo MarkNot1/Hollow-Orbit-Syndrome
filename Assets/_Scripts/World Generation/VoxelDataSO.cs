@@ -20,4 +20,5 @@ public class TextureData
     public Vector2Int up, down, side;
     public bool isSolid = true;
     public bool generatesCollider = true;
+    public bool isSmoothable = false;
 }
