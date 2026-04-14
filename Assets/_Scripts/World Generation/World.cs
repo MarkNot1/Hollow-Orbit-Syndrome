@@ -1,10 +1,11 @@
 using System;
+using System.Linq;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Events;
-using System.Collections.Concurrent;
 
 public class World : MonoBehaviour
 {
@@ -23,6 +24,7 @@ public class World : MonoBehaviour
     public UnityEvent OnWorldCreated, OnNewChunksGenerated;
 
     public WorldData worldData { get; private set; }
+    private bool IsWorldCreated = false;
 
     private void Awake()
     {
@@ -85,18 +87,18 @@ public class World : MonoBehaviour
         ConcurrentDictionary<Vector3Int, ChunkData> dataDictionary 
             = await CalculateWorldChunkData(worldGenerationData.chunkDataPositionsToCreate);
 
-        foreach (var calculatedData in worldGenerationData.chunkDataPositionsToCreate)
+        foreach (var calculatedData in dataDictionary)
         {
             worldData.chunkDataDictionary.Add(calculatedData.Key, calculatedData.Value);
         }
         
-        Dictionary<Vector3Int, MeshData> meshDataDictionary = new Dictionary<Vector3Int, MeshData>();
-        foreach (Vector3Int pos in worldGenerationData.chunkPositionsToCreate)
-        {
-            ChunkData data = worldData.chunkDataDictionary[pos];
-            MeshData meshData = Chunk.GetChunkMeshData(data);
-            meshDataDictionary.Add(pos, meshData);
-        }
+        ConcurrentDictionary<Vector3Int, MeshData> meshDataDictionary = new ConcurrentDictionary<Vector3Int, MeshData>();
+        List<ChunkData> dataToRender = worldData.chunkDataDictionary
+            .Where(keyValuePair => worldGenerationData.chunkPositionsToCreate.Contains(keyValuePair.Key))
+            .Select(keyValuePair => keyValuePair.Value)
+            .ToList();
+
+        meshDataDictionary = await CreateMeshDataAsync(dataToRender);
 
         StartCoroutine(chunckCreationCoroutine(meshDataDictionary));
     }
@@ -117,7 +119,22 @@ public class World : MonoBehaviour
 
     }
 
-    IEnumerator chunckCreationCoroutine(Dictionary<Vector3Int, MeshData> meshDataDictionary)
+    private Task<ConcurrentDictionary<Vector3Int, MeshData>> CreateMeshDataAsync(List<ChunkData> dataToRender)
+    {
+        ConcurrentDictionary<Vector3Int, MeshData> meshDataDictionary = new ConcurrentDictionary<Vector3Int, MeshData>();
+
+        return Task.Run(() => {
+            foreach (ChunkData data in dataToRender)
+            {
+                MeshData meshData = Chunk.GetChunkMeshData(data);
+                meshDataDictionary.TryAdd(data.worldPosition, meshData);
+            }
+            return meshDataDictionary;
+        });
+
+    }
+
+    IEnumerator chunckCreationCoroutine(ConcurrentDictionary<Vector3Int, MeshData> meshDataDictionary)
     {
         foreach (var item in meshDataDictionary)
         {
@@ -204,10 +221,10 @@ public class World : MonoBehaviour
 
     }
 
-    internal void LoadAdditionalChunksRequest(GameObject player)
+    internal async void LoadAdditionalChunksRequest(GameObject player)
     {
         Debug.Log("Load more chunks");
-        GenerateWorld(VoxelMetrics.WorldToVoxelCoord(player.transform.position));
+        await GenerateWorld(VoxelMetrics.WorldToVoxelCoord(player.transform.position));
         OnNewChunksGenerated?.Invoke();
     }
 
