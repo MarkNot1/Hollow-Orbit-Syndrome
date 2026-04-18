@@ -82,19 +82,28 @@ public class ChunkRenderer : MonoBehaviour
 
         meshCollider.sharedMesh = null;
         collisionMesh.Clear();
-        collisionMesh.vertices = meshData.vertices.ToArray();
-        collisionMesh.triangles = meshData.triangles.ToArray();
-        collisionMesh.RecalculateNormals();
-
-        meshCollider.sharedMesh = collisionMesh;
+        
+        if (meshData.vertices.Count > 0)
+        {
+            collisionMesh.vertices = meshData.vertices.ToArray();
+            collisionMesh.triangles = meshData.triangles.ToArray();
+            collisionMesh.RecalculateNormals();
+            meshCollider.sharedMesh = collisionMesh;
+        }
     }
 
     public void SetCollisionActive(bool isActive)
     {
         if (meshCollider != null)
         {
-            meshCollider.convex = false;
-            meshCollider.enabled = isActive;
+            if (isActive && (meshCollider.sharedMesh == null || meshCollider.sharedMesh.vertexCount == 0))
+            {
+                meshCollider.enabled = false;
+            }
+            else
+            {
+                meshCollider.enabled = isActive;
+            }
         }
     }
 

@@ -147,8 +147,8 @@ public class debug_Menu : MonoBehaviour
         indices.Clear();
 
         colliderKeyScratch.Clear();
-        if (gameManager != null)
-            gameManager.CopyActiveColliderChunkKeysTo(colliderKeyScratch);
+        //if (gameManager != null)
+        //    gameManager.CopyActiveColliderChunkKeysTo(colliderKeyScratch);
 
         if (colliderKeyScratch.Count == 0 && world != null && gameManager != null && gameManager.PlayerObject != null)
             AppendLocalColliderGrid3x3(colliderKeyScratch, world, gameManager.PlayerObject.transform.position);

@@ -56,7 +56,7 @@ public static class WorldDataHelper
         ChunkRenderer chunk = null;
         if (world.worldData.chunkDictionary.TryGetValue(pos, out chunk))
         {
-            world.RemoveChunk(chunk);
+            world.worldRenderer.RemoveChunk(chunk);
             world.worldData.chunkDictionary.Remove(pos);
         }
     }
@@ -120,7 +120,7 @@ public static class WorldDataHelper
         return containerChunk;
     }
 
-    internal static List<Vector3Int> GetUnnededData(World.WorldData worldData, List<Vector3Int> allChunkDataPositionsNeeded)
+    internal static List<Vector3Int> GetUnnededData(WorldData worldData, List<Vector3Int> allChunkDataPositionsNeeded)
     {
         return worldData.chunkDataDictionary.Keys
     .Where(pos => allChunkDataPositionsNeeded.Contains(pos) == false && worldData.chunkDataDictionary[pos].modifiedByThePlayer == false)
@@ -128,7 +128,7 @@ public static class WorldDataHelper
 
     }
 
-    internal static List<Vector3Int> GetUnnededChunks(World.WorldData worldData, List<Vector3Int> allChunkPositionsNeeded)
+    internal static List<Vector3Int> GetUnnededChunks(WorldData worldData, List<Vector3Int> allChunkPositionsNeeded)
     {
         List<Vector3Int> positionToRemove = new List<Vector3Int>();
         foreach (var pos in worldData.chunkDictionary.Keys
@@ -144,7 +144,7 @@ public static class WorldDataHelper
         return positionToRemove;
     }
 
-    internal static List<Vector3Int> SelectPositonsToCreate(World.WorldData worldData, List<Vector3Int> allChunkPositionsNeeded, Vector3Int playerPosition)
+    internal static List<Vector3Int> SelectPositonsToCreate(WorldData worldData, List<Vector3Int> allChunkPositionsNeeded, Vector3Int playerPosition)
     {
         return allChunkPositionsNeeded
             .Where(pos => worldData.chunkDictionary.ContainsKey(pos) == false)
@@ -152,7 +152,7 @@ public static class WorldDataHelper
             .ToList();
     }
 
-    internal static List<Vector3Int> SelectDataPositonsToCreate(World.WorldData worldData, List<Vector3Int> allChunkDataPositionsNeeded, Vector3Int playerPosition)
+    internal static List<Vector3Int> SelectDataPositonsToCreate(WorldData worldData, List<Vector3Int> allChunkDataPositionsNeeded, Vector3Int playerPosition)
     {
         return allChunkDataPositionsNeeded
             .Where(pos => worldData.chunkDataDictionary.ContainsKey(pos) == false)

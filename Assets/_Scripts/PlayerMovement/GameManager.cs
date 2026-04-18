@@ -36,7 +36,10 @@ public class GameManager : MonoBehaviour
         if (spawnPlayerWhenWorldCreated && world != null)
             world.OnWorldCreated.AddListener(SpawnPlayer);
         if (world != null)
+        {
             world.OnNewChunksGenerated.AddListener(OnNewChunksGeneratedRefreshColliders);
+            world.OnChunkRendered += HandleChunkRendered;
+        }
     }
 
     private void OnDestroy()
@@ -44,7 +47,18 @@ public class GameManager : MonoBehaviour
         if (world != null)
             world.OnWorldCreated.RemoveListener(SpawnPlayer);
         if (world != null)
+        {
             world.OnNewChunksGenerated.RemoveListener(OnNewChunksGeneratedRefreshColliders);
+            world.OnChunkRendered -= HandleChunkRendered;
+        }
+    }
+
+    private void HandleChunkRendered(Vector3Int pos, ChunkRenderer chunk)
+    {
+        if (colliderGridChunks.Contains(pos))
+        {
+            chunk.SetCollisionActive(true);
+        }
     }
 
     private void OnNewChunksGeneratedRefreshColliders()
@@ -107,16 +121,11 @@ public class GameManager : MonoBehaviour
         SetCurrentChunkCoordinates();
         UpdatePlayerChunkCollider();
         StopAllCoroutines();
-        StartCoroutine(CheckIfShouldLoadNextPosition());
     }
 
-    IEnumerator CheckIfShouldLoadNextPosition()
+    private void Update()
     {
-        if (player == null || world == null) yield break;
-
-        yield return new WaitForSeconds(detectionTime);
-
-        if (player == null || world == null) yield break;
+        if (player == null || world == null) return;
 
         Vector3Int playerVoxel = VoxelMetrics.WorldToVoxelCoord(player.transform.position);
         int centerVx = currentPlayerChunkPosition.x + world.chunkSize / 2;
@@ -129,11 +138,8 @@ public class GameManager : MonoBehaviour
         {
             world.LoadAdditionalChunksRequest(player);
             SetCurrentChunkCoordinates();
+            UpdatePlayerChunkCollider();
         }
-
-        UpdatePlayerChunkCollider();
-
-        StartCoroutine(CheckIfShouldLoadNextPosition());
     }
 
     private void SetCurrentChunkCoordinates()
