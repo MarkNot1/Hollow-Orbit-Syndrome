@@ -81,7 +81,9 @@ public class ChunkRenderer : MonoBehaviour
         mesh.RecalculateNormals();
 
         meshCollider.sharedMesh = null;
-        collisionMesh.Clear();
+        if (collisionMesh != null)
+            Destroy(collisionMesh);
+        collisionMesh = new Mesh();
         
         if (meshData.vertices.Count > 0)
         {
