@@ -3205,7 +3205,7 @@ MonoBehaviour:
   inputManager: {fileID: 10284589}
   grid: {fileID: 1520767672}
   componentDatabase: {fileID: 11400000, guid: 0dc88aabd8a3a7949ba032adf8085fb4, type: 2}
-  componentCellPadding: 0.9
+  componentCellPadding: 0.95
 --- !u!1 &2137643156
 GameObject:
   m_ObjectHideFlags: 0

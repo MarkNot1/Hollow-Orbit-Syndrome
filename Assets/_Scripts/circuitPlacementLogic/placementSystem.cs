@@ -2,10 +2,11 @@ using UnityEngine;
 
 public class placementSystem : MonoBehaviour
 {
-    private const int CircuitGridSize = 25;
+    private const int CircuitGridSize = 16;
     private const string PlacementRootName = "Placed Circuit Components";
     private const string TileGridName = "TileGrid";
     private const float GridSurfaceOffset = 0.002f;
+    private static readonly int GridSizeProperty = Shader.PropertyToID("_Size");
 
     [SerializeField]
     private placementInputManager inputManager;
@@ -15,7 +16,7 @@ public class placementSystem : MonoBehaviour
     private int selectedComponentID = -1;
 
     [SerializeField]
-    private float componentCellPadding = 0.9f;
+    private float componentCellPadding = 0.95f;
 
     private SpecialPrefabInteractable activeCircuit;
     private Transform activeTileGrid;
@@ -29,6 +30,7 @@ public class placementSystem : MonoBehaviour
     private float activeCellWidth = 1f;
     private float activeCellHeight = 1f;
     private int placementStartedFrame = -1;
+    private MaterialPropertyBlock tileGridPropertyBlock;
 
     private void Start()
     {
@@ -153,7 +155,20 @@ public class placementSystem : MonoBehaviour
         activeCellWidth = activeTileGrid.TransformVector(Vector3.right * localCellWidth).magnitude;
         activeCellHeight = activeTileGrid.TransformVector(Vector3.forward * localCellHeight).magnitude;
         circuitPlacementPlane = new Plane(gridNormal, activeTileGrid.TransformPoint(activeTileGridBounds.center));
+        ApplyTileGridMaterialProperties();
         return activeCellWidth > 0.0001f && activeCellHeight > 0.0001f;
+    }
+
+    private void ApplyTileGridMaterialProperties()
+    {
+        Renderer tileGridRenderer = activeTileGrid != null ? activeTileGrid.GetComponent<Renderer>() : null;
+        if (tileGridRenderer == null)
+            return;
+
+        tileGridPropertyBlock ??= new MaterialPropertyBlock();
+        tileGridRenderer.GetPropertyBlock(tileGridPropertyBlock);
+        tileGridPropertyBlock.SetVector(GridSizeProperty, new Vector4(CircuitGridSize, CircuitGridSize, 0f, 0f));
+        tileGridRenderer.SetPropertyBlock(tileGridPropertyBlock);
     }
 
     private static Transform FindChildByName(Transform parent, string childName)
