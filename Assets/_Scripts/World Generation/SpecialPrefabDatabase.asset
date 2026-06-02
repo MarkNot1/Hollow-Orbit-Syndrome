@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c4db3249a7047d9a2b832a62bf62171, type: 3}
+  m_Name: SpecialPrefabDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::SpecialPrefabDatabaseSO
+  specialPrefabDataList:
+  - itemId: Circuit
+    displayName: Circuit
+    prefab: {fileID: 6412820369796514768, guid: 0a9de5ffbd442c2449a985d76f866ae2, type: 3}
+    sizeInVoxels: {x: 1, y: 1, z: 1}
+    interactionType: 1

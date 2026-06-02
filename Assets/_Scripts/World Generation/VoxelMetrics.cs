@@ -39,4 +39,13 @@ public static class VoxelMetrics
     {
         return WorldPointToVoxelIndex(hit.point - hit.normal * surfaceBiasMeters);
     }
+
+    /// <summary>
+    /// Voxel index of the empty cell adjacent to the hit face (nudge along +normal).
+    /// Use this when placing a new voxel so it lands on top of — not inside — the surface.
+    /// </summary>
+    public static Vector3Int WorldHitToAdjacentVoxelIndex(RaycastHit hit, float surfaceBiasMeters = 0.002f)
+    {
+        return WorldPointToVoxelIndex(hit.point + hit.normal * surfaceBiasMeters);
+    }
 }

@@ -16,6 +16,11 @@ public class PlayerInput : MonoBehaviour
     public event Action OnFly;
     /// <summary>Fired when <c>DestroyBlock</c> is performed (e.g. right mouse).</summary>
     public event Action OnDestroyBlock;
+    /// <summary>Fired when <c>PlaceBlock</c> is performed (e.g. left mouse).</summary>
+    public event Action OnPlaceBlock;
+    public event Action OnInteract;
+    public event Action OnCancel;
+
     public bool RunningPressed { get; private set; }
     public Vector3 MovementInput { get; private set; }
     /// <summary>Mouse/look delta this frame (pixels). With new Input System this is pointer delta.</summary>
@@ -27,6 +32,10 @@ public class PlayerInput : MonoBehaviour
     private InputAction _lookAction;
     private InputAction _jumpAction;
     private InputAction _sprintAction;
+    private InputAction _flyAction;
+    private InputAction _destroyBlockAction;
+    private InputAction _interactAction;
+    private bool gameplayInputBlocked;
 
     private void Awake()
     {
@@ -47,13 +56,17 @@ public class PlayerInput : MonoBehaviour
         _lookAction = _playerMap.FindAction("Look");
         _jumpAction = _playerMap.FindAction("Jump");
         _sprintAction = _playerMap.FindAction("Sprint");
-        InputAction flyAction = _playerMap.FindAction("Fly");
-        InputAction destroyBlockAction = _playerMap.FindAction("DestroyBlock");
+        _flyAction = _playerMap.FindAction("Fly");
+        _destroyBlockAction = _playerMap.FindAction("DestroyBlock");
+        _interactAction = _playerMap.FindAction("Interact");
 
-        if (flyAction != null)
-            flyAction.performed += OnFlyPerformed;
-        if (destroyBlockAction != null)
-            destroyBlockAction.performed += OnDestroyBlockPerformed;
+        if (_flyAction != null)
+            _flyAction.performed += OnFlyPerformed;
+        if (_destroyBlockAction != null)
+            _destroyBlockAction.performed += OnDestroyBlockPerformed;
+        if (_interactAction != null)
+            _interactAction.started += OnInteractStarted;
+        // PlaceBlock is polled directly via Mouse.current in Update(), no asset action needed.
     }
 
     private void OnEnable()
@@ -64,31 +77,67 @@ public class PlayerInput : MonoBehaviour
     private void OnDisable()
     {
         _playerMap?.Disable();
-        if (_playerMap != null)
-        {
-            InputAction flyAction = _playerMap.FindAction("Fly");
-            InputAction destroyBlockAction = _playerMap.FindAction("DestroyBlock");
-            if (flyAction != null)
-                flyAction.performed -= OnFlyPerformed;
-            if (destroyBlockAction != null)
-                destroyBlockAction.performed -= OnDestroyBlockPerformed;
-        }
+    }
+
+    private void OnDestroy()
+    {
+        if (_flyAction != null)
+            _flyAction.performed -= OnFlyPerformed;
+        if (_destroyBlockAction != null)
+            _destroyBlockAction.performed -= OnDestroyBlockPerformed;
+        if (_interactAction != null)
+            _interactAction.started -= OnInteractStarted;
     }
 
     private void OnDestroyBlockPerformed(InputAction.CallbackContext _)
     {
+        if (gameplayInputBlocked)
+            return;
+
         OnDestroyBlock?.Invoke();
+    }
+
+    private void OnPlaceBlockPerformed(InputAction.CallbackContext _)
+    {
+        if (gameplayInputBlocked)
+            return;
+
+        OnPlaceBlock?.Invoke();
     }
 
     private void OnFlyPerformed(InputAction.CallbackContext _)
     {
+        if (gameplayInputBlocked)
+            return;
+
         OnFly?.Invoke();
+    }
+
+    private void OnInteractStarted(InputAction.CallbackContext _)
+    {
+        OnInteract?.Invoke();
     }
 
     private void Update()
     {
+        // Poll left mouse button first, independent of action map state.
+        if (!gameplayInputBlocked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            OnPlaceBlock?.Invoke();
+
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            OnCancel?.Invoke();
+
         if (_playerMap == null || !_playerMap.enabled)
             return;
+
+        if (gameplayInputBlocked)
+        {
+            MovementInput = Vector3.zero;
+            MousePosition = Vector2.zero;
+            IsJumping = false;
+            RunningPressed = false;
+            return;
+        }
 
         if (_moveAction != null)
         {
@@ -114,5 +163,39 @@ public class PlayerInput : MonoBehaviour
             RunningPressed = _sprintAction.IsPressed();
         else
             RunningPressed = false;
+    }
+
+    public void SetGameplayInputBlocked(bool blocked)
+    {
+        gameplayInputBlocked = blocked;
+        if (!blocked)
+            return;
+
+        MovementInput = Vector3.zero;
+        MousePosition = Vector2.zero;
+        IsJumping = false;
+        RunningPressed = false;
+    }
+
+    public string GetInteractBindingDisplayName()
+    {
+        if (_interactAction == null)
+            return "E";
+
+        for (int i = 0; i < _interactAction.bindings.Count; i++)
+        {
+            InputBinding binding = _interactAction.bindings[i];
+            if (binding.isComposite || binding.isPartOfComposite)
+                continue;
+            if (!string.IsNullOrEmpty(binding.groups) && !binding.groups.Contains("Keyboard&Mouse"))
+                continue;
+
+            string displayName = _interactAction.GetBindingDisplayString(i, InputBinding.DisplayStringOptions.DontIncludeInteractions);
+            if (!string.IsNullOrWhiteSpace(displayName))
+                return displayName;
+        }
+
+        string fallback = _interactAction.GetBindingDisplayString(InputBinding.DisplayStringOptions.DontIncludeInteractions);
+        return string.IsNullOrWhiteSpace(fallback) ? "E" : fallback;
     }
 }

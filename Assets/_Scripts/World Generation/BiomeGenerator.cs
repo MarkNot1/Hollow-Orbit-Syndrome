@@ -4,8 +4,6 @@ using UnityEngine;
 public class BiomeGenerator : MonoBehaviour
 {
 
-    public int waterThreshold = 50;
-
     public NoiseSettings biomeNoiseSettings;
 
     public DomainWarping domainWarping;
@@ -15,22 +13,85 @@ public class BiomeGenerator : MonoBehaviour
 
     public List<VoxelLayerHandler> aditionalLayerHandlers;
 
+    private bool useBaseLayerTypes;
+    private VoxelType surfaceVoxelType;
+    private VoxelType undergroundVoxelType;
+
+    private void Awake()
+    {
+        RefreshLayerReferences();
+    }
+
+    private void OnValidate()
+    {
+        RefreshLayerReferences();
+    }
+
+    private void RefreshLayerReferences()
+    {
+        if (startLayerHandler == null)
+            startLayerHandler = GetComponentInChildren<AirLayerHandler>();
+
+        if (aditionalLayerHandlers == null)
+            aditionalLayerHandlers = new List<VoxelLayerHandler>();
+        aditionalLayerHandlers.RemoveAll(layer => layer == null);
+
+        SurfaceLayerHandler surfaceLayer = GetComponentInChildren<SurfaceLayerHandler>();
+        UndergroundLayerHandler undergroundLayer = GetComponentInChildren<UndergroundLayerHandler>();
+        if (surfaceLayer != null && undergroundLayer != null)
+        {
+            surfaceVoxelType = surfaceLayer.surfaceVoxelType;
+            undergroundVoxelType = undergroundLayer.undergroundVoxelType;
+            useBaseLayerTypes = true;
+        }
+        else
+        {
+            useBaseLayerTypes = false;
+        }
+    }
+
     public ChunkData ProcessChunckColumn(ChunkData data, int x, int z, Vector2Int mapSeedOffset)
     {
         biomeNoiseSettings.worldOffset = mapSeedOffset;
         int groundPosition = GetSurfaceHeightNoise(data.worldPosition.x + x, data.worldPosition.z + z, data.chunkHeight);
 
-        // Handlers use local Y (0..chunkHeight-1); compare to surface using world Y inside each handler.
-        for (int localY = 0; localY < data.chunkHeight; localY++)
-            startLayerHandler.Handle(data, x, localY, z, groundPosition, mapSeedOffset);
+        if (useBaseLayerTypes)
+        {
+            for (int localY = 0; localY < data.chunkHeight; localY++)
+                HandleBaseLayer(data, x, localY, z, groundPosition);
+        }
+        else if (startLayerHandler != null)
+        {
+            for (int localY = 0; localY < data.chunkHeight; localY++)
+                startLayerHandler.Handle(data, x, localY, z, groundPosition, mapSeedOffset);
+        }
+
+        if (aditionalLayerHandlers == null)
+            return data;
 
         foreach (var layer in aditionalLayerHandlers)
         {
+            if (layer == null)
+                continue;
+
             for (int localY = 0; localY < data.chunkHeight; localY++)
                 layer.Handle(data, x, localY, z, groundPosition, mapSeedOffset);
         }
 
         return data;
+    }
+
+    private void HandleBaseLayer(ChunkData data, int x, int y, int z, int surfaceHeightNoise)
+    {
+        int worldY = data.worldPosition.y + y;
+        Vector3Int pos = new Vector3Int(x, y, z);
+
+        if (worldY > surfaceHeightNoise)
+            Chunk.SetVoxel(data, pos, VoxelType.Air);
+        else if (worldY == surfaceHeightNoise)
+            Chunk.SetVoxel(data, pos, surfaceVoxelType);
+        else
+            Chunk.SetVoxel(data, pos, undergroundVoxelType);
     }
 
     public int GetSurfaceHeightNoise(int x, int z, int chunkHeight)

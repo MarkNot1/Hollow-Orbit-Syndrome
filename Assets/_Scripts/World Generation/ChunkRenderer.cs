@@ -16,6 +16,7 @@ public class ChunkRenderer : MonoBehaviour
     Mesh mesh;
     Mesh collisionMesh;
     public bool showGizmo = false;
+    private bool _isCollisionActive = false;
 
     public ChunkData ChunkData { get; private set; }
 
@@ -92,10 +93,13 @@ public class ChunkRenderer : MonoBehaviour
             collisionMesh.RecalculateNormals();
             meshCollider.sharedMesh = collisionMesh;
         }
+
+        SetCollisionActive(_isCollisionActive);
     }
 
     public void SetCollisionActive(bool isActive)
     {
+        _isCollisionActive = isActive;
         if (meshCollider != null)
         {
             if (isActive && (meshCollider.sharedMesh == null || meshCollider.sharedMesh.vertexCount == 0))

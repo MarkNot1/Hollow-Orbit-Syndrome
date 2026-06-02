@@ -10,6 +10,8 @@ public class Character : MonoBehaviour
     private PlayerInput playerInput;
     [SerializeField]
     private PlayerMovement playerMovement;
+    [SerializeField]
+    private PlayerPlacementController placementController;
 
     public float interactionRayLength = 5;
 
@@ -29,12 +31,17 @@ public class Character : MonoBehaviour
             mainCamera = Camera.main;
         playerInput = GetComponent<PlayerInput>();
         playerMovement = GetComponent<PlayerMovement>();
+        placementController = GetComponent<PlayerPlacementController>();
+        if (placementController == null)
+            placementController = gameObject.AddComponent<PlayerPlacementController>();
+        placementController.InteractionRayLength = interactionRayLength;
         world = FindFirstObjectByType<World>();
     }
 
     private void Start()
     {
         playerInput.OnDestroyBlock += TryDeleteTargetBlock;
+        playerInput.OnPlaceBlock += TryPlaceSelectedItem;
         playerInput.OnFly += HandleFlyClick;
     }
 
@@ -43,6 +50,7 @@ public class Character : MonoBehaviour
         if (playerInput != null)
         {
             playerInput.OnDestroyBlock -= TryDeleteTargetBlock;
+            playerInput.OnPlaceBlock -= TryPlaceSelectedItem;
             playerInput.OnFly -= HandleFlyClick;
         }
     }
@@ -72,6 +80,14 @@ public class Character : MonoBehaviour
             playerMovement.HandleGravity(playerInput.IsJumping);
             playerMovement.Walk(playerInput.MovementInput, playerInput.RunningPressed);
         }
+    }
+
+    private void OnGUI()
+    {
+        // Simple crosshair in the middle of the screen
+        float size = 4f;
+        GUI.color = Color.white;
+        GUI.DrawTexture(new Rect(Screen.width / 2f - size / 2f, Screen.height / 2f - size / 2f, size, size), Texture2D.whiteTexture);
     }
 
     IEnumerator ResetWaiting()
@@ -104,5 +120,14 @@ public class Character : MonoBehaviour
 
         if (bestIndex >= 0)
             world.SetVoxel(RaycastHitsNonAlloc[bestIndex], VoxelType.Air);
+    }
+
+    private void TryPlaceSelectedItem()
+    {
+        if (placementController == null)
+            return;
+
+        placementController.InteractionRayLength = interactionRayLength;
+        placementController.TryPlaceSelectedItem();
     }
 }

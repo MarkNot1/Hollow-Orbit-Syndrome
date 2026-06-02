@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 341bc9155be8bf5468fa9960dc45af46, type: 3}
+  m_Name: ComponentDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::componentDatabaseSO
+  componentDataList:
+  - <componentName>k__BackingField: Resistor
+    <ID>k__BackingField: 0
+    <Size>k__BackingField: {x: 1, y: 1}
+    <Prefab>k__BackingField: {fileID: 7352410886749273829, guid: 236326b4606727341a72ee4354c58322, type: 3}
+  - <componentName>k__BackingField: Capacitor
+    <ID>k__BackingField: 1
+    <Size>k__BackingField: {x: 1, y: 1}
+    <Prefab>k__BackingField: {fileID: 5787555075194090966, guid: 7ccf85dfafa9abf4d93f57174b5bcc6a, type: 3}
+  - <componentName>k__BackingField: LED
+    <ID>k__BackingField: 2
+    <Size>k__BackingField: {x: 1, y: 1}
+    <Prefab>k__BackingField: {fileID: 9096868891484184635, guid: aa40f241252c2644c8464cdba7404f50, type: 3}
+  - <componentName>k__BackingField: Diode
+    <ID>k__BackingField: 3
+    <Size>k__BackingField: {x: 1, y: 1}
+    <Prefab>k__BackingField: {fileID: 7455758672981159970, guid: d6e7e4e6f2b356d469853027448d6ceb, type: 3}

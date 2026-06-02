@@ -16,6 +16,10 @@ public class World : MonoBehaviour
 
     public GameObject chunkPrefab;
     public WorldRenderer worldRenderer;
+    [SerializeField]
+    private GameObject circuitVoxelPrefab;
+    [SerializeField]
+    private SpecialPrefabDatabaseSO specialPrefabDatabase;
 
     public TerrainGenerator terrainGenerator;
     public Vector2Int mapSeedOffset;
@@ -29,6 +33,7 @@ public class World : MonoBehaviour
     public event Action<Vector3Int, ChunkRenderer> OnChunkRendered;
 
     public WorldData worldData { get; private set; }
+    public SpecialVoxelManager SpecialVoxels { get; private set; }
     private bool IsWorldCreated = false;
 
     private void Awake()
@@ -81,6 +86,8 @@ public class World : MonoBehaviour
 
         foreach (Vector3Int pos in worldGenerationData.chunkPositionsToRemove)
         {
+            if (SpecialVoxels != null)
+                SpecialVoxels.HideSpecialPrefabsForChunk(pos);
             WorldDataHelper.RemoveChunk(this, pos);
         }
 
@@ -95,9 +102,14 @@ public class World : MonoBehaviour
         {
             dataDictionary = await CalculateWorldChunkData(worldGenerationData.chunkDataPositionsToCreate);
         }
-        catch (Exception)
+        catch (OperationCanceledException)
         {
             Debug.Log("Task cancelled");
+            return;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
             return;
         }
 
@@ -117,9 +129,14 @@ public class World : MonoBehaviour
         {
             meshDataDictionary = await CreateMeshDataAsync(dataToRender);
         }
-        catch (Exception)
+        catch (OperationCanceledException)
         {
             Debug.Log("Task cancelled");
+            return;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
             return;
         }
         StartCoroutine(chunckCreationCoroutine(meshDataDictionary));
@@ -184,6 +201,8 @@ public class World : MonoBehaviour
     {
         ChunkRenderer chunkRenderer = worldRenderer.RenderChunk(worldData, position, meshData);
         worldData.chunkDictionary.Add(position, chunkRenderer);
+        if (SpecialVoxels != null)
+            SpecialVoxels.ShowSpecialPrefabsForChunk(position);
         OnChunkRendered?.Invoke(position, chunkRenderer);
     }
         
@@ -197,6 +216,8 @@ public class World : MonoBehaviour
         Vector3Int pos = GetVoxelPos(hit);
 
         WorldDataHelper.SetVoxel(chunk.ChunkData.worldReference, pos, voxelType);
+        if (SpecialVoxels != null && (voxelType == VoxelType.Air || voxelType == VoxelType.Nothing))
+            SpecialVoxels.RemoveSpecialPrefabsAttachedTo(pos);
         chunk.ModifiedByThePlayer = true;
 
         if (Chunk.IsOnEdge(chunk.ChunkData, pos))
@@ -214,6 +235,120 @@ public class World : MonoBehaviour
 
         chunk.UpdateChunk();
         return true;
+    }
+
+    /// <summary>
+    /// Places <paramref name="voxelType"/> in the empty cell adjacent to the hit face (+normal nudge).
+    /// The target position must be Air or Nothing; occupied cells are skipped to avoid overwriting existing voxels.
+    /// Edge-neighbour chunks are re-rendered exactly like SetVoxel.
+    /// </summary>
+    internal bool PlaceVoxel(RaycastHit hit, VoxelType voxelType)
+    {
+        ChunkRenderer chunk = hit.collider.GetComponent<ChunkRenderer>();
+        if (chunk == null)
+            return false;
+
+        // Resolve the hit voxel (same as delete), then step one cell in the normal direction.
+        Vector3Int hitPos = VoxelMetrics.WorldHitToTargetVoxelIndex(hit);
+        Vector3Int normal = new Vector3Int(
+            Mathf.RoundToInt(hit.normal.x),
+            Mathf.RoundToInt(hit.normal.y),
+            Mathf.RoundToInt(hit.normal.z));
+        Vector3Int pos = hitPos + normal;
+
+        // Guard: only place into empty space — never overwrite a solid voxel
+        ChunkData existingChunkData = WorldDataHelper.GetChunkData(chunk.ChunkData.worldReference, pos);
+        if (existingChunkData != null)
+        {
+            Vector3Int localPos = Chunk.GetVoxelInChunkCoordinates(existingChunkData, pos);
+            VoxelType existing = Chunk.GetVoxelFromChunkCoordinates(existingChunkData, localPos);
+            if (existing != VoxelType.Air && existing != VoxelType.Nothing)
+                return false;
+        }
+
+        WorldDataHelper.SetVoxel(chunk.ChunkData.worldReference, pos, voxelType);
+
+        // VoxelHelper only generates a face when the neighbour is NOT Nothing (see GetMeshData).
+        // Unmodified terrain stores empty space as Nothing (C# enum default = 0).
+        // Convert any Nothing neighbour of the placed voxel to Air so faces generate correctly.
+        Vector3Int[] faceNeighbours = {
+            pos + Vector3Int.up,
+            pos + Vector3Int.down,
+            pos + Vector3Int.left,
+            pos + Vector3Int.right,
+            pos + Vector3Int.forward,
+            pos + Vector3Int.back
+        };
+        foreach (Vector3Int neighbourPos in faceNeighbours)
+        {
+            ChunkData ncd = WorldDataHelper.GetChunkData(chunk.ChunkData.worldReference, neighbourPos);
+            if (ncd == null) continue;
+            Vector3Int nLocal = Chunk.GetVoxelInChunkCoordinates(ncd, neighbourPos);
+            if (Chunk.GetVoxelFromChunkCoordinates(ncd, nLocal) == VoxelType.Nothing)
+                WorldDataHelper.SetVoxel(chunk.ChunkData.worldReference, neighbourPos, VoxelType.Air);
+        }
+
+        // Update the chunk that owns the placed voxel (use chunk key, not voxel pos)
+        ChunkData targetChunkData = WorldDataHelper.GetChunkData(chunk.ChunkData.worldReference, pos);
+        if (targetChunkData != null)
+        {
+            targetChunkData.modifiedByThePlayer = true;
+
+            if (Chunk.IsOnEdge(targetChunkData, pos))
+            {
+                List<ChunkData> neighbourDataList = Chunk.GetEdgeNeighbourChunk(targetChunkData, pos);
+                foreach (ChunkData neighbourData in neighbourDataList)
+                {
+                    ChunkRenderer chunkToUpdate = WorldDataHelper.GetChunk(neighbourData.worldReference, neighbourData.worldPosition);
+                    if (chunkToUpdate != null)
+                        chunkToUpdate.UpdateChunk();
+                }
+            }
+
+            ChunkRenderer targetChunk = WorldDataHelper.GetChunk(chunk.ChunkData.worldReference, targetChunkData.worldPosition);
+            if (targetChunk != null)
+                targetChunk.UpdateChunk();
+            else
+                chunk.UpdateChunk();
+        }
+        else
+        {
+            chunk.ModifiedByThePlayer = true;
+            chunk.UpdateChunk();
+        }
+
+        return true;
+    }
+
+    internal bool PlaceSpecialVoxel(RaycastHit hit)
+    {
+        EnsureSpecialVoxelManager();
+        return SpecialVoxels != null && SpecialVoxels.PlaceCircuit(hit);
+    }
+
+    internal bool PlaceSpecialPrefab(RaycastHit hit, SpecialPrefabData prefabData)
+    {
+        EnsureSpecialVoxelManager();
+        return SpecialVoxels != null && SpecialVoxels.PlaceSpecialPrefab(hit, prefabData);
+    }
+
+    internal bool PlaceSpecialPrefab(RaycastHit hit, string itemId)
+    {
+        if (specialPrefabDatabase == null || !specialPrefabDatabase.TryGetPrefab(itemId, out SpecialPrefabData prefabData))
+            return false;
+
+        return PlaceSpecialPrefab(hit, prefabData);
+    }
+
+    private void EnsureSpecialVoxelManager()
+    {
+        if (SpecialVoxels != null)
+            return;
+
+        SpecialVoxels = GetComponent<SpecialVoxelManager>();
+        if (SpecialVoxels == null)
+            SpecialVoxels = gameObject.AddComponent<SpecialVoxelManager>();
+        SpecialVoxels.Configure(this, circuitVoxelPrefab, specialPrefabDatabase);
     }
 
     private static Vector3Int GetVoxelPos(RaycastHit hit)

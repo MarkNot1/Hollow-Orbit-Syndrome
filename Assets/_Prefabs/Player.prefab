@@ -62,6 +62,7 @@ GameObject:
   - component: {fileID: 4081740488566517861}
   - component: {fileID: 526412777801638667}
   - component: {fileID: 8082511736439053025}
+  - component: {fileID: 662408908123456789}
   - component: {fileID: 1861672840676727327}
   m_Layer: 0
   m_Name: Player
@@ -222,6 +223,33 @@ MonoBehaviour:
   fly: 0
   animator: {fileID: 0}
   world: {fileID: 0}
+--- !u!114 &662408908123456789
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8957435387905183184}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e620bb16a4cf4b448a433901ce31ea4d, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::CircuitInspectionController
+  mainCamera: {fileID: 0}
+  playerInput: {fileID: 4081740488566517861}
+  character: {fileID: 8082511736439053025}
+  playerCamera: {fileID: 1912315969007942716}
+  playerRigidbody: {fileID: 7951365982156293677}
+  playerCollider: {fileID: 1861672840676727327}
+  virtualCamera: {fileID: 0}
+  promptText: {fileID: 0}
+  fallbackRayLength: 5
+  framingPadding: 0.72
+  minCameraDistance: 0.42
+  exitDistance: 1.6
+  exitRayHeight: 6
+  exitRayDistance: 12
+  cameraSlideDuration: 0.28
 --- !u!65 &1861672840676727327
 BoxCollider:
   m_ObjectHideFlags: 0

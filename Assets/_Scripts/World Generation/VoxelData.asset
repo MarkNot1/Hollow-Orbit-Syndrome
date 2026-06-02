@@ -29,13 +29,6 @@ MonoBehaviour:
     isSolid: 1
     generatesCollider: 0
     isSmoothable: 0
-  - voxelType: 4
-    up: {x: 0, y: 3}
-    down: {x: 0, y: 3}
-    side: {x: 0, y: 3}
-    isSolid: 0
-    generatesCollider: 0
-    isSmoothable: 0
   - voxelType: 1
     up: {x: 0, y: 3}
     down: {x: 0, y: 3}
