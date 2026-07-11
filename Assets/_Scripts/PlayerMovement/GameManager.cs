@@ -112,6 +112,10 @@ public class GameManager : MonoBehaviour
         else if (camera_VM != null)
             camera_VM.Follow = player.transform;
 
+        PlayerCamera playerCamera = player.GetComponentInChildren<PlayerCamera>();
+        if (playerCamera != null)
+            playerCamera.CaptureCursorForGameplay();
+
         StartCheckingTheMap();
     }
 

@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 public class PlayerCamera : MonoBehaviour
 {
@@ -11,6 +13,11 @@ public class PlayerCamera : MonoBehaviour
 
     [SerializeField]
     private PlayerInput playerInput;
+    [SerializeField]
+    private bool lockCursorOnStart;
+    [SerializeField]
+    private bool lockCursorOnWorldClick = true;
+
     private Rigidbody playerBodyRb;
     private float pendingYaw;
 
@@ -25,12 +32,28 @@ public class PlayerCamera : MonoBehaviour
 
     private void Start()
     {
-        Cursor.lockState = CursorLockMode.Locked;
+        SetCursorLocked(lockCursorOnStart);
+    }
+
+    private void Update()
+    {
+        if (!lockCursorOnWorldClick || Cursor.lockState == CursorLockMode.Locked || Mouse.current == null)
+            return;
+
+        if (!Mouse.current.leftButton.wasPressedThisFrame && !Mouse.current.rightButton.wasPressedThisFrame)
+            return;
+
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            return;
+
+        SetCursorLocked(true);
     }
 
     private void LateUpdate()
     {
         if (playerInput == null) return;
+        if (Cursor.lockState != CursorLockMode.Locked) return;
+
         // MousePosition is pointer delta (pixels) from new Input System; scale by sensitivity only (no Time.deltaTime).
         float mouseX = playerInput.MousePosition.x * sensitivity;
         float mouseY = playerInput.MousePosition.y * sensitivity;
@@ -60,6 +83,18 @@ public class PlayerCamera : MonoBehaviour
         pendingYaw = 0f;
     }
 
+    public void CaptureCursorForGameplay()
+    {
+        lockCursorOnStart = true;
+        SetCursorLocked(true);
+    }
+
+    private static void SetCursorLocked(bool locked)
+    {
+        Cursor.lockState = locked ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !locked;
+    }
+
 }
 
     /*
@@ -80,4 +115,3 @@ public class PlayerCamera : MonoBehaviour
         }
     }
     */
-

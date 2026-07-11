@@ -3,6 +3,7 @@ using Unity.Cinemachine;
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class InteractionInspectionController : MonoBehaviour
 {
@@ -39,6 +40,20 @@ public class InteractionInspectionController : MonoBehaviour
     private float exitRayDistance = 12f;
     [SerializeField]
     private float cameraSlideDuration = 0.28f;
+    [SerializeField]
+    private float inspectionZoomSpeed = 0.006f;
+    [SerializeField]
+    private float inspectionNearClipPlane = 0.01f;
+    [SerializeField]
+    private float inspectionMinZoomDistance = 0.08f;
+    [SerializeField]
+    private float inspectionMinZoomMultiplier = 0.45f;
+    [SerializeField]
+    private float inspectionMaxZoomMultiplier = 2f;
+    [SerializeField]
+    private float inspectionTiltSpeed = 0.15f;
+    [SerializeField]
+    private float inspectionMaxTiltAngle = 35f;
 
     private readonly RaycastHit[] raycastHits = new RaycastHit[32];
     private IPlayerInteractable targetedInteractable;
@@ -47,6 +62,15 @@ public class InteractionInspectionController : MonoBehaviour
     private Transform previousCameraFollow;
     private bool isInspecting;
     private Coroutine cameraSlideCoroutine;
+    private Vector3 inspectionFocusPoint;
+    private Vector3 inspectionBaseViewDirection;
+    private Vector3 inspectionViewDirection;
+    private float inspectionBaseDistance;
+    private float inspectionCurrentDistance;
+    private float previousCameraNearClipPlane;
+    private float previousVirtualCameraNearClipPlane;
+    private bool hasStoredCameraNearClipPlane;
+    private bool hasStoredVirtualCameraNearClipPlane;
 
     public bool IsInspecting => isInspecting;
     public IInspectableInteractable CurrentInspectedInteractable => inspectedInteractable;
@@ -104,7 +128,10 @@ public class InteractionInspectionController : MonoBehaviour
     private void Update()
     {
         if (isInspecting)
+        {
+            HandleInspectionCameraControls();
             return;
+        }
 
         targetedInteractable = FindTargetedInteractable();
         if (targetedInteractable == null)
@@ -200,6 +227,7 @@ public class InteractionInspectionController : MonoBehaviour
 
         previousCameraFollow = virtualCamera.Follow;
         EnsureInspectionAnchor();
+        ApplyInspectionClipPlane();
         Pose targetPose = GetInspectionCameraPose(interactable);
         PositionInspectionAnchorAtCurrentCamera();
         virtualCamera.Follow = inspectionAnchor;
@@ -218,6 +246,7 @@ public class InteractionInspectionController : MonoBehaviour
             virtualCamera.Follow = previousCameraFollow;
 
         StopCameraSlide();
+        RestoreInspectionClipPlane();
 
         if (movePlayerNearInteractable && interactable != null)
             TryMovePlayerNearInteractable(interactable);
@@ -229,6 +258,43 @@ public class InteractionInspectionController : MonoBehaviour
 
         OnInspectionExited?.Invoke(interactable);
         HandleInspectionExited(interactable);
+    }
+
+    private void ApplyInspectionClipPlane()
+    {
+        float nearClip = Mathf.Max(0.001f, inspectionNearClipPlane);
+
+        if (mainCamera != null)
+        {
+            previousCameraNearClipPlane = mainCamera.nearClipPlane;
+            hasStoredCameraNearClipPlane = true;
+            mainCamera.nearClipPlane = nearClip;
+        }
+
+        if (virtualCamera != null)
+        {
+            LensSettings lens = virtualCamera.Lens;
+            previousVirtualCameraNearClipPlane = lens.NearClipPlane;
+            hasStoredVirtualCameraNearClipPlane = true;
+            lens.NearClipPlane = nearClip;
+            virtualCamera.Lens = lens;
+        }
+    }
+
+    private void RestoreInspectionClipPlane()
+    {
+        if (mainCamera != null && hasStoredCameraNearClipPlane)
+            mainCamera.nearClipPlane = previousCameraNearClipPlane;
+
+        if (virtualCamera != null && hasStoredVirtualCameraNearClipPlane)
+        {
+            LensSettings lens = virtualCamera.Lens;
+            lens.NearClipPlane = previousVirtualCameraNearClipPlane;
+            virtualCamera.Lens = lens;
+        }
+
+        hasStoredCameraNearClipPlane = false;
+        hasStoredVirtualCameraNearClipPlane = false;
     }
 
     protected virtual void HandleInspectionEntered(IInspectableInteractable interactable)
@@ -251,9 +317,86 @@ public class InteractionInspectionController : MonoBehaviour
         float distance = (largestSize * framingPadding) / (2f * Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad));
         distance = Mathf.Max(distance, minCameraDistance);
 
-        Vector3 cameraPosition = bounds.center + viewDirection.normalized * distance;
-        Quaternion cameraRotation = Quaternion.LookRotation(bounds.center - cameraPosition, Vector3.up);
+        inspectionFocusPoint = bounds.center;
+        inspectionBaseViewDirection = viewDirection.normalized;
+        inspectionViewDirection = inspectionBaseViewDirection;
+        inspectionBaseDistance = distance;
+        inspectionCurrentDistance = distance;
+
+        Vector3 cameraPosition = GetInspectionCameraPosition();
+        Quaternion cameraRotation = GetInspectionCameraRotation(cameraPosition);
         return new Pose(cameraPosition, cameraRotation);
+    }
+
+    private void HandleInspectionCameraControls()
+    {
+        if (inspectionAnchor == null || Mouse.current == null || cameraSlideCoroutine != null)
+            return;
+
+        bool changed = false;
+        Vector2 scroll = Mouse.current.scroll.ReadValue();
+        if (Mathf.Abs(scroll.y) > 0.01f)
+        {
+            float minDistance = Mathf.Max(inspectionMinZoomDistance, inspectionBaseDistance * inspectionMinZoomMultiplier);
+            float maxDistance = Mathf.Max(minDistance + 0.01f, inspectionBaseDistance * inspectionMaxZoomMultiplier);
+            inspectionCurrentDistance = Mathf.Clamp(
+                inspectionCurrentDistance - scroll.y * inspectionZoomSpeed,
+                minDistance,
+                maxDistance);
+            changed = true;
+        }
+
+        if (Mouse.current.middleButton.isPressed)
+        {
+            Vector2 delta = Mouse.current.delta.ReadValue();
+            if (delta.sqrMagnitude > 0.01f)
+            {
+                changed |= TryTiltInspectionView(delta);
+            }
+        }
+
+        if (!changed)
+            return;
+
+        Vector3 cameraPosition = GetInspectionCameraPosition();
+        inspectionAnchor.SetPositionAndRotation(cameraPosition, GetInspectionCameraRotation(cameraPosition));
+    }
+
+    private Vector3 GetInspectionCameraPosition()
+    {
+        return inspectionFocusPoint + inspectionViewDirection * inspectionCurrentDistance;
+    }
+
+    private Quaternion GetInspectionCameraRotation(Vector3 cameraPosition)
+    {
+        return Quaternion.LookRotation(inspectionFocusPoint - cameraPosition, Vector3.up);
+    }
+
+    private bool TryTiltInspectionView(Vector2 delta)
+    {
+        Vector3 candidateDirection = inspectionViewDirection;
+
+        if (Mathf.Abs(delta.x) > 0.01f)
+            candidateDirection = Quaternion.AngleAxis(delta.x * inspectionTiltSpeed, Vector3.up) * candidateDirection;
+
+        if (Mathf.Abs(delta.y) > 0.01f)
+        {
+            Vector3 tiltRight = Vector3.Cross(Vector3.up, candidateDirection);
+            if (tiltRight.sqrMagnitude < 0.001f)
+                tiltRight = inspectionAnchor.right;
+
+            candidateDirection = Quaternion.AngleAxis(-delta.y * inspectionTiltSpeed, tiltRight.normalized) * candidateDirection;
+        }
+
+        candidateDirection.Normalize();
+        if (candidateDirection.sqrMagnitude < 0.001f)
+            return false;
+
+        if (Vector3.Angle(inspectionBaseViewDirection, candidateDirection) > inspectionMaxTiltAngle)
+            return false;
+
+        inspectionViewDirection = candidateDirection;
+        return true;
     }
 
     private void PositionInspectionAnchorAtCurrentCamera()
