@@ -13,7 +13,7 @@ public class placementInputManager : MonoBehaviour
     [SerializeField]
     LayerMask placementLayerMask;
 
-    public event Action OnClicked, OnExit;
+    public event Action OnClicked, OnRightClicked, OnExit;
 
     private void Awake()
     {
@@ -26,6 +26,10 @@ public class placementInputManager : MonoBehaviour
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
             OnClicked?.Invoke();
+        }
+        if (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame)
+        {
+            OnRightClicked?.Invoke();
         }
         if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
         {

@@ -1,322 +1,254 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 public class placementSystem : MonoBehaviour
 {
     private const int CircuitGridSize = 16;
-    private const string PlacementRootName = "Placed Circuit Components";
     private const string TileGridName = "TileGrid";
     private const float GridSurfaceOffset = 0.002f;
     private static readonly int GridSizeProperty = Shader.PropertyToID("_Size");
+    private static readonly int GridOffsetProperty = Shader.PropertyToID("_GridOffset");
 
     [SerializeField]
     private placementInputManager inputManager;
 
     [SerializeField]
-    private componentDatabaseSO componentDatabase;
-
-    [SerializeField, Range(0.1f, 1f)]
-    private float componentCellPadding = 0.95f;
-
-    private readonly Dictionary<SpecialPrefabInteractable, GridData> circuitGrids = new();
-    private int selectedComponentIndex = -1;
-    private int placementStartedFrame = -1;
+    private ObjectPlacer objectPlacer;
 
     private SpecialPrefabInteractable activeCircuit;
-    private Transform activeTileGrid;
-    private Bounds activeTileGridBounds;
-    private Transform circuitPlacementRoot;
-    private Plane circuitPlacementPlane;
-    private Vector3 gridRight;
-    private Vector3 gridForward;
-    private Vector3 gridNormal;
-    private float cellWorldWidth;
-    private float cellWorldHeight;
+    private IPlacementState activeState;
     private MaterialPropertyBlock tileGridPropertyBlock;
+
+    private void Awake()
+    {
+        ResolveReferences();
+    }
+
+    private void OnEnable()
+    {
+        ResolveReferences();
+        SubscribeToInput();
+    }
 
     private void OnDisable()
     {
-        StopPlacement();
+        UnsubscribeFromInput();
+        StopCurrentState();
+
+        if (objectPlacer != null)
+            objectPlacer.ClearActiveBoard();
+    }
+
+    private void Update()
+    {
+        activeState?.UpdateState();
     }
 
     public void SetActiveCircuit(SpecialPrefabInteractable circuit)
     {
-        StopPlacement();
+        StopCurrentState();
         activeCircuit = circuit;
-        activeTileGrid = null;
-        circuitPlacementRoot = null;
 
-        if (activeCircuit != null && !circuitGrids.ContainsKey(activeCircuit))
-            circuitGrids.Add(activeCircuit, new GridData());
+        if (objectPlacer == null)
+        {
+            Debug.LogError("ObjectPlacer is not assigned to placementSystem.", this);
+            return;
+        }
 
-        ConfigureCircuitGrid();
+        if (!TryConfigureCircuitBoard(out CircuitBoardContext board))
+        {
+            objectPlacer.ClearActiveBoard();
+            return;
+        }
+
+        objectPlacer.SetActiveBoard(board);
     }
 
     public void ClearActiveCircuit()
     {
-        StopPlacement();
+        StopCurrentState();
         activeCircuit = null;
-        activeTileGrid = null;
-        circuitPlacementRoot = null;
+
+        if (objectPlacer != null)
+            objectPlacer.ClearActiveBoard();
     }
 
     public void StartPlacement(int ID)
     {
-        StopPlacement();
-
         if (activeCircuit == null)
         {
             Debug.LogWarning("Cannot place circuit components without inspecting a circuit.", this);
             return;
         }
 
-        if (inputManager == null)
+        if (inputManager == null || objectPlacer == null)
         {
-            Debug.LogError("Placement input manager is not assigned.", this);
+            Debug.LogError("Placement input manager or ObjectPlacer is not assigned.", this);
             return;
         }
 
-        if (componentDatabase == null || componentDatabase.componentDataList == null)
-        {
-            Debug.LogError("Component database is not assigned.", this);
-            return;
-        }
-
-        selectedComponentIndex = componentDatabase.componentDataList.FindIndex(data => data.ID == ID);
-        if (selectedComponentIndex < 0)
-        {
-            Debug.LogError($"Component with ID {ID} not found in database.", this);
-            return;
-        }
-
-        componentData selectedComponent = componentDatabase.componentDataList[selectedComponentIndex];
-        if (selectedComponent.Prefab == null)
-        {
-            Debug.LogError($"Component with ID {ID} has no prefab.", this);
-            selectedComponentIndex = -1;
-            return;
-        }
-
-        if (selectedComponent.Size.x <= 0 || selectedComponent.Size.y <= 0)
-        {
-            Debug.LogError($"Component with ID {ID} has an invalid grid size.", this);
-            selectedComponentIndex = -1;
-            return;
-        }
-
-        if (!ConfigureCircuitGrid())
-        {
-            selectedComponentIndex = -1;
-            return;
-        }
-
-        placementStartedFrame = Time.frameCount;
-        inputManager.OnClicked += PlaceComponent;
-        inputManager.OnExit += StopPlacement;
+        ChangeState(new PlacementState(
+            objectPlacer,
+            inputManager,
+            ID,
+            HandlePlacementCompleted));
     }
 
-    private void PlaceComponent()
+    private void HandlePrimaryAction()
     {
-        // Ignore the UI click that selected the component.
-        if (Time.frameCount == placementStartedFrame || selectedComponentIndex < 0 || activeCircuit == null)
-            return;
-
-        componentData selectedComponent = componentDatabase.componentDataList[selectedComponentIndex];
-        if (!TryGetCircuitCell(selectedComponent.Size, out Vector3Int gridPosition, out Vector3 footprintCenter))
-            return;
-
-        GridData gridData = circuitGrids[activeCircuit];
-        if (!gridData.CanPlace(gridPosition, selectedComponent.Size))
-            return;
-
-        GameObject instance = Instantiate(
-            selectedComponent.Prefab,
-            footprintCenter,
-            Quaternion.LookRotation(gridForward, gridNormal),
-            EnsureCircuitPlacementRoot());
-
-        FitToFootprint(instance, selectedComponent.Size, footprintCenter);
-
-        gridData.TryAdd(gridPosition, selectedComponent.Size);
-        StopPlacement();
+        activeState?.HandlePrimaryAction();
     }
 
-    private void StopPlacement()
+    private void ToggleRemovalState()
     {
-        selectedComponentIndex = -1;
-        placementStartedFrame = -1;
-
-        if (inputManager == null)
+        if (inputManager != null && inputManager.IsPointerOverUI())
             return;
 
-        inputManager.OnClicked -= PlaceComponent;
-        inputManager.OnExit -= StopPlacement;
+        if (activeState is RemovingState)
+        {
+            StopCurrentState();
+            return;
+        }
+
+        if (activeCircuit == null || objectPlacer == null || inputManager == null)
+            return;
+
+        ChangeState(new RemovingState(objectPlacer, inputManager));
     }
 
-    private bool ConfigureCircuitGrid()
+    private void HandlePlacementCompleted()
     {
+        if (activeState is PlacementState)
+            StopCurrentState();
+    }
+
+    private void ChangeState(IPlacementState nextState)
+    {
+        StopCurrentState();
+        if (nextState == null)
+            return;
+
+        activeState = nextState;
+        if (activeState.Enter())
+            return;
+
+        IPlacementState failedState = activeState;
+        activeState = null;
+        failedState.Exit();
+    }
+
+    private void StopCurrentState()
+    {
+        if (activeState == null)
+            return;
+
+        IPlacementState stateToStop = activeState;
+        activeState = null;
+        stateToStop.Exit();
+    }
+
+    private bool TryConfigureCircuitBoard(out CircuitBoardContext board)
+    {
+        board = null;
         if (activeCircuit == null)
             return false;
 
-        activeTileGrid = activeCircuit.transform.Find(TileGridName);
-        if (activeTileGrid == null)
+        Transform tileGrid = activeCircuit.transform.Find(TileGridName);
+        if (tileGrid == null)
         {
-            Debug.LogWarning("Inspected circuit has no direct TileGrid child. Cannot place circuit components.", activeCircuit);
+            Debug.LogWarning("Inspected circuit has no direct TileGrid child. Cannot edit circuit components.", activeCircuit);
             return false;
         }
 
-        MeshFilter tileGridMesh = activeTileGrid.GetComponent<MeshFilter>();
+        MeshFilter tileGridMesh = tileGrid.GetComponent<MeshFilter>();
         if (tileGridMesh == null || tileGridMesh.sharedMesh == null)
         {
-            Debug.LogWarning("TileGrid has no mesh. Cannot place circuit components.", activeTileGrid);
+            Debug.LogWarning("TileGrid has no mesh. Cannot edit circuit components.", tileGrid);
             return false;
         }
 
-        activeTileGridBounds = tileGridMesh.sharedMesh.bounds;
-        if (activeTileGridBounds.size.x <= 0.0001f || activeTileGridBounds.size.z <= 0.0001f)
+        Bounds tileGridBounds = tileGridMesh.sharedMesh.bounds;
+        if (tileGridBounds.size.x <= 0.0001f || tileGridBounds.size.z <= 0.0001f)
         {
-            Debug.LogWarning("TileGrid mesh has invalid dimensions.", activeTileGrid);
+            Debug.LogWarning("TileGrid mesh has invalid dimensions.", tileGrid);
             return false;
         }
 
-        gridRight = activeTileGrid.right.normalized;
-        gridForward = activeTileGrid.forward.normalized;
-        gridNormal = activeTileGrid.up.normalized;
-
-        float localCellWidth = activeTileGridBounds.size.x / CircuitGridSize;
-        float localCellHeight = activeTileGridBounds.size.z / CircuitGridSize;
-        cellWorldWidth = activeTileGrid.TransformVector(Vector3.right * localCellWidth).magnitude;
-        cellWorldHeight = activeTileGrid.TransformVector(Vector3.forward * localCellHeight).magnitude;
+        Vector3 gridRight = tileGrid.right.normalized;
+        Vector3 gridForward = tileGrid.forward.normalized;
+        Vector3 gridNormal = tileGrid.up.normalized;
 
         Vector3 preferredNormal = activeCircuit.GetPreferredViewDirection();
         if (preferredNormal.sqrMagnitude > 0.01f && Vector3.Dot(gridNormal, preferredNormal.normalized) < 0f)
             gridNormal = -gridNormal;
 
-        circuitPlacementPlane = new Plane(gridNormal, activeTileGrid.TransformPoint(activeTileGridBounds.center));
+        float localCellWidth = tileGridBounds.size.x / CircuitGridSize;
+        float localCellHeight = tileGridBounds.size.z / CircuitGridSize;
+        float cellWorldWidth = tileGrid.TransformVector(Vector3.right * localCellWidth).magnitude;
+        float cellWorldHeight = tileGrid.TransformVector(Vector3.forward * localCellHeight).magnitude;
+        Plane placementPlane = new(gridNormal, tileGrid.TransformPoint(tileGridBounds.center));
 
-        Renderer tileGridRenderer = activeTileGrid.GetComponent<Renderer>();
-        if (tileGridRenderer != null)
-        {
-            tileGridPropertyBlock ??= new MaterialPropertyBlock();
-            tileGridRenderer.GetPropertyBlock(tileGridPropertyBlock);
-            tileGridPropertyBlock.SetVector(GridSizeProperty, new Vector4(CircuitGridSize, CircuitGridSize, 0f, 0f));
-            tileGridRenderer.SetPropertyBlock(tileGridPropertyBlock);
-        }
-
+        UpdateBoardShader(tileGrid);
+        board = new CircuitBoardContext(
+            activeCircuit,
+            tileGrid,
+            tileGridBounds,
+            placementPlane,
+            gridRight,
+            gridForward,
+            gridNormal,
+            cellWorldWidth,
+            cellWorldHeight,
+            CircuitGridSize,
+            CircuitGridSize,
+            GridSurfaceOffset);
         return true;
     }
 
-    private void FitToFootprint(GameObject instance, Vector2Int footprintSize, Vector3 footprintCenter)
+    private void UpdateBoardShader(Transform tileGrid)
     {
-        if (!TryGetProjectedBounds(instance, out Vector3 min, out Vector3 max))
+        Renderer tileGridRenderer = tileGrid.GetComponent<Renderer>();
+        if (tileGridRenderer == null)
             return;
 
-        float width = Mathf.Max(max.x - min.x, 0.0001f);
-        float height = Mathf.Max(max.y - min.y, 0.0001f);
-        float scale = Mathf.Min(
-            cellWorldWidth * footprintSize.x / width,
-            cellWorldHeight * footprintSize.y / height) * componentCellPadding;
+        tileGridPropertyBlock ??= new MaterialPropertyBlock();
+        tileGridRenderer.GetPropertyBlock(tileGridPropertyBlock);
+        tileGridPropertyBlock.SetVector(
+            GridSizeProperty,
+            new Vector4(CircuitGridSize, CircuitGridSize, 0f, 0f));
+        tileGridPropertyBlock.SetVector(
+            GridOffsetProperty,
+            new Vector4(-0.5f, 0.5f, 0f, 0f));
+        tileGridRenderer.SetPropertyBlock(tileGridPropertyBlock);
+    }
 
-        if (!float.IsFinite(scale) || scale <= 0f)
+    private void ResolveReferences()
+    {
+        if (inputManager == null)
+            inputManager = FindFirstObjectByType<placementInputManager>();
+        if (objectPlacer == null)
+            objectPlacer = FindFirstObjectByType<ObjectPlacer>();
+    }
+
+    private void SubscribeToInput()
+    {
+        if (inputManager == null)
             return;
 
-        instance.transform.localScale *= scale;
-        if (!TryGetProjectedBounds(instance, out min, out max))
+        inputManager.OnClicked -= HandlePrimaryAction;
+        inputManager.OnRightClicked -= ToggleRemovalState;
+        inputManager.OnExit -= StopCurrentState;
+        inputManager.OnClicked += HandlePrimaryAction;
+        inputManager.OnRightClicked += ToggleRemovalState;
+        inputManager.OnExit += StopCurrentState;
+    }
+
+    private void UnsubscribeFromInput()
+    {
+        if (inputManager == null)
             return;
 
-        Vector3 currentCenter = new((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, min.z);
-        Vector3 targetCenter = new(
-            Vector3.Dot(footprintCenter, gridRight),
-            Vector3.Dot(footprintCenter, gridForward),
-            Vector3.Dot(footprintCenter, gridNormal));
-
-        instance.transform.position += gridRight * (targetCenter.x - currentCenter.x)
-            + gridForward * (targetCenter.y - currentCenter.y)
-            + gridNormal * (targetCenter.z - currentCenter.z);
-    }
-
-    private bool TryGetProjectedBounds(GameObject instance, out Vector3 min, out Vector3 max)
-    {
-        Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
-        if (renderers.Length > 0)
-            return TryProjectBounds(renderers, renderer => renderer.bounds, out min, out max);
-
-        Collider[] colliders = instance.GetComponentsInChildren<Collider>();
-        return TryProjectBounds(colliders, collider => collider.bounds, out min, out max);
-    }
-
-    private bool TryProjectBounds<T>(T[] sources, System.Func<T, Bounds> getBounds, out Vector3 min, out Vector3 max)
-    {
-        min = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
-        max = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
-
-        foreach (T source in sources)
-        {
-            Bounds bounds = getBounds(source);
-            Vector3 center = new(
-                Vector3.Dot(bounds.center, gridRight),
-                Vector3.Dot(bounds.center, gridForward),
-                Vector3.Dot(bounds.center, gridNormal));
-            Vector3 radius = new(
-                Vector3.Dot(Abs(gridRight), bounds.extents),
-                Vector3.Dot(Abs(gridForward), bounds.extents),
-                Vector3.Dot(Abs(gridNormal), bounds.extents));
-
-            min = Vector3.Min(min, center - radius);
-            max = Vector3.Max(max, center + radius);
-        }
-
-        return sources.Length > 0;
-    }
-
-    private static Vector3 Abs(Vector3 value)
-        => new(Mathf.Abs(value.x), Mathf.Abs(value.y), Mathf.Abs(value.z));
-
-    private Transform EnsureCircuitPlacementRoot()
-    {
-        if (circuitPlacementRoot != null)
-            return circuitPlacementRoot;
-
-        circuitPlacementRoot = activeCircuit.transform.Find(PlacementRootName);
-        if (circuitPlacementRoot != null)
-            return circuitPlacementRoot;
-
-        circuitPlacementRoot = new GameObject(PlacementRootName).transform;
-        circuitPlacementRoot.SetParent(activeCircuit.transform, false);
-        return circuitPlacementRoot;
-    }
-
-    private bool TryGetCircuitCell(Vector2Int footprintSize, out Vector3Int gridPosition, out Vector3 footprintCenter)
-    {
-        gridPosition = default;
-        footprintCenter = default;
-
-        if (activeTileGrid == null || inputManager == null ||
-            !inputManager.TryGetSelectedPositionOnPlane(circuitPlacementPlane, out Vector3 pointerPosition))
-            return false;
-
-        Vector3 localPosition = activeTileGrid.InverseTransformPoint(pointerPosition);
-        if (localPosition.x < activeTileGridBounds.min.x || localPosition.x > activeTileGridBounds.max.x ||
-            localPosition.z < activeTileGridBounds.min.z || localPosition.z > activeTileGridBounds.max.z)
-            return false;
-
-        float cellWidth = activeTileGridBounds.size.x / CircuitGridSize;
-        float cellHeight = activeTileGridBounds.size.z / CircuitGridSize;
-        gridPosition = new Vector3Int(
-            Mathf.Min(Mathf.FloorToInt((localPosition.x - activeTileGridBounds.min.x) / cellWidth), CircuitGridSize - 1),
-            Mathf.Min(Mathf.FloorToInt((localPosition.z - activeTileGridBounds.min.z) / cellHeight), CircuitGridSize - 1),
-            0);
-
-        if (gridPosition.x + footprintSize.x > CircuitGridSize ||
-            gridPosition.y + footprintSize.y > CircuitGridSize)
-            return false;
-
-        Vector3 localFootprintCenter = new(
-            activeTileGridBounds.min.x + (gridPosition.x + footprintSize.x * 0.5f) * cellWidth,
-            activeTileGridBounds.center.y,
-            activeTileGridBounds.min.z + (gridPosition.y + footprintSize.y * 0.5f) * cellHeight);
-
-        footprintCenter = activeTileGrid.TransformPoint(localFootprintCenter) + gridNormal * GridSurfaceOffset;
-        return true;
+        inputManager.OnClicked -= HandlePrimaryAction;
+        inputManager.OnRightClicked -= ToggleRemovalState;
+        inputManager.OnExit -= StopCurrentState;
     }
 }
