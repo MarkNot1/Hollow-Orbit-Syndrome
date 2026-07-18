@@ -8,6 +8,8 @@ public class GridData
     private readonly int height;
 
     public IReadOnlyDictionary<Vector3Int, PlacedCircuitComponent> PlacedComponents => placedComponents;
+    public int Width => width;
+    public int Height => height;
 
     public GridData(int width, int height)
     {
@@ -70,6 +72,9 @@ public class GridData
         component = null;
         return false;
     }
+
+    public bool IsOccupied(Vector3Int gridPosition)
+        => TryGetPlacement(gridPosition, out _);
 
     public bool TryRemove(Vector3Int gridPosition, out PlacedCircuitComponent component)
     {

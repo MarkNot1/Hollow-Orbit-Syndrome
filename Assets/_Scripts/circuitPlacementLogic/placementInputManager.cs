@@ -9,6 +9,7 @@ public class placementInputManager : MonoBehaviour
     private Camera sceneCamera;
 
     private Vector3 lastPosition;
+    private readonly RaycastHit[] raycastHits = new RaycastHit[32];
 
     [SerializeField]
     LayerMask placementLayerMask;
@@ -54,6 +55,44 @@ public class placementInputManager : MonoBehaviour
         position = ray.GetPoint(distance);
         lastPosition = position;
         return true;
+    }
+
+    public bool TryGetPointerRay(out Ray ray)
+    {
+        ray = default;
+        if (sceneCamera == null || Mouse.current == null)
+            return false;
+
+        ray = sceneCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
+        return true;
+    }
+
+    public bool TryGetRaycastComponent<T>(LayerMask mask, out T component, float distance = 100f)
+        where T : Component
+    {
+        component = null;
+        if (!TryGetPointerRay(out Ray ray))
+            return false;
+
+        int count = Physics.RaycastNonAlloc(
+            ray,
+            raycastHits,
+            distance,
+            mask,
+            QueryTriggerInteraction.Collide);
+        float closestDistance = float.PositiveInfinity;
+
+        for (int i = 0; i < count; i++)
+        {
+            T candidate = raycastHits[i].collider.GetComponentInParent<T>();
+            if (candidate != null && raycastHits[i].distance < closestDistance)
+            {
+                closestDistance = raycastHits[i].distance;
+                component = candidate;
+            }
+        }
+
+        return component != null;
     }
 
     public Vector3 GetSelectedMapPosition()

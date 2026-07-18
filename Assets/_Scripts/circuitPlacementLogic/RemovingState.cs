@@ -2,11 +2,16 @@ public sealed class RemovingState : IPlacementState
 {
     private readonly ObjectPlacer objectPlacer;
     private readonly placementInputManager inputManager;
+    private readonly CircuitWireSystem wireSystem;
 
-    public RemovingState(ObjectPlacer objectPlacer, placementInputManager inputManager)
+    public RemovingState(
+        ObjectPlacer objectPlacer,
+        placementInputManager inputManager,
+        CircuitWireSystem wireSystem)
     {
         this.objectPlacer = objectPlacer;
         this.inputManager = inputManager;
+        this.wireSystem = wireSystem;
     }
 
     public bool Enter()
@@ -16,7 +21,10 @@ public sealed class RemovingState : IPlacementState
         => objectPlacer.UpdateRemovalPreview(inputManager);
 
     public void HandlePrimaryAction()
-        => objectPlacer.TryRemoveSelectedComponent(inputManager);
+    {
+        if (wireSystem == null || !wireSystem.TryRemoveSelectedWire(inputManager))
+            objectPlacer.TryRemoveSelectedComponent(inputManager);
+    }
 
     public void Exit()
         => objectPlacer.EndRemoval();

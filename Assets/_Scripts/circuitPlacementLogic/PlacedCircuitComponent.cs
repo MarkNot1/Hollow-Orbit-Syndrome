@@ -20,5 +20,25 @@ public class PlacedCircuitComponent : MonoBehaviour
         componentId = id;
         gridPosition = position;
         footprintSize = size;
+        ConfigureNodes();
+    }
+
+    public void ConfigureNodes()
+    {
+        CircuitNode[] nodes = GetComponentsInChildren<CircuitNode>(true);
+        if (nodes.Length == 0)
+        {
+            Transform[] children = GetComponentsInChildren<Transform>(true);
+            foreach (Transform child in children)
+            {
+                if (child != transform && child.name.StartsWith("Node_", System.StringComparison.OrdinalIgnoreCase))
+                    child.gameObject.AddComponent<CircuitNode>();
+            }
+
+            nodes = GetComponentsInChildren<CircuitNode>(true);
+        }
+
+        foreach (CircuitNode node in nodes)
+            node.Initialize(this);
     }
 }

@@ -2045,6 +2045,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ObjectPlacer
   componentDatabase: {fileID: 11400000, guid: 0dc88aabd8a3a7949ba032adf8085fb4, type: 2}
   preview: {fileID: 1682971866}
+  wireSystem: {fileID: 1927176806}
   componentCellPadding: 0.95
 --- !u!1 &1223480469
 GameObject:
@@ -2959,6 +2960,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1927176804}
   - component: {fileID: 1927176805}
+  - component: {fileID: 1927176806}
   m_Layer: 0
   m_Name: PlacementSystem
   m_TagString: Untagged
@@ -2995,6 +2997,31 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::placementSystem
   inputManager: {fileID: 10284589}
   objectPlacer: {fileID: 1222435885}
+  wireSystem: {fileID: 1927176806}
+--- !u!114 &1927176806
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1927176803}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 454389a4f4cf481fa0701d3c6b9acf88, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CircuitWireSystem
+  wirePrefab: {fileID: 9069578609356802705, guid: 7a5d03cabe227f94a9e31ce65208fe7b, type: 3}
+  wireMaterial: {fileID: 2100000, guid: e3f020948af76c140937b28c89c47567, type: 2}
+  wireWidth: 0.025
+  wireSurfaceOffset: 0.004
+  wireColor: {r: 0.95, g: 0.55, b: 0.08, a: 1}
+  invalidColor: {r: 1, g: 0, b: 0, a: 1}
+  nodeLayerMask:
+    serializedVersion: 2
+    m_Bits: 256
+  wireLayerMask:
+    serializedVersion: 2
+    m_Bits: 512
 --- !u!1 &2137643156
 GameObject:
   m_ObjectHideFlags: 0

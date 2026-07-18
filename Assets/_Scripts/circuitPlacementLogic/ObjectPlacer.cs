@@ -11,6 +11,9 @@ public class ObjectPlacer : MonoBehaviour
     [SerializeField]
     private PreviewSystem preview;
 
+    [SerializeField]
+    private CircuitWireSystem wireSystem;
+
     [SerializeField, Range(0.1f, 1f)]
     private float componentCellPadding = 0.95f;
 
@@ -27,6 +30,10 @@ public class ObjectPlacer : MonoBehaviour
         => placedComponentsByCircuit;
 
     public bool HasActiveBoard => activeBoard != null && activeGrid != null;
+    public GridData ActiveGrid => activeGrid;
+
+    public void SetWireSystem(CircuitWireSystem system)
+        => wireSystem = system;
 
     public void SetActiveBoard(CircuitBoardContext board)
     {
@@ -131,7 +138,7 @@ public class ObjectPlacer : MonoBehaviour
             return;
 
         lastDetectedPosition = gridPosition;
-        bool placementValidity = activeGrid.CanPlace(gridPosition, selectedComponent.Size);
+        bool placementValidity = CanPlace(gridPosition, selectedComponent.Size);
         preview.UpdatePosition(footprintCenter, placementValidity);
         AlignToFootprint(preview.PreviewObject, footprintCenter);
     }
@@ -147,7 +154,7 @@ public class ObjectPlacer : MonoBehaviour
                 selectedComponent.Size,
                 out Vector3Int gridPosition,
                 out Vector3 footprintCenter) ||
-            !activeGrid.CanPlace(gridPosition, selectedComponent.Size))
+            !CanPlace(gridPosition, selectedComponent.Size))
             return false;
 
         GameObject instance = Instantiate(
@@ -268,7 +275,10 @@ public class ObjectPlacer : MonoBehaviour
 
         ClearRemovalPreview();
         if (component != null)
+        {
+            wireSystem?.RemoveConnections(component);
             Destroy(component.gameObject);
+        }
 
         return true;
     }
@@ -312,6 +322,10 @@ public class ObjectPlacer : MonoBehaviour
                     $"Skipping authored component '{component.name}': its footprint is invalid, outside the board, or overlapping.",
                     component);
             }
+            else
+            {
+                component.ConfigureNodes();
+            }
         }
     }
 
@@ -335,21 +349,8 @@ public class ObjectPlacer : MonoBehaviour
         footprintCenter = default;
 
         if (!HasActiveBoard ||
-            !inputManager.TryGetSelectedPositionOnPlane(activeBoard.PlacementPlane, out Vector3 pointerPosition))
+            !activeBoard.TryGetPointerCell(inputManager, out gridPosition, out _))
             return false;
-
-        Vector3 localPosition = activeBoard.TileGrid.InverseTransformPoint(pointerPosition);
-        Bounds bounds = activeBoard.TileGridBounds;
-        if (localPosition.x < bounds.min.x || localPosition.x > bounds.max.x ||
-            localPosition.z < bounds.min.z || localPosition.z > bounds.max.z)
-            return false;
-
-        float cellWidth = bounds.size.x / activeBoard.GridWidth;
-        float cellHeight = bounds.size.z / activeBoard.GridHeight;
-        gridPosition = new Vector3Int(
-            Mathf.Min(Mathf.FloorToInt((localPosition.x - bounds.min.x) / cellWidth), activeBoard.GridWidth - 1),
-            Mathf.Min(Mathf.FloorToInt((localPosition.z - bounds.min.z) / cellHeight), activeBoard.GridHeight - 1),
-            0);
 
         if (gridPosition.x + footprintSize.x > activeBoard.GridWidth ||
             gridPosition.y + footprintSize.y > activeBoard.GridHeight)
@@ -360,18 +361,11 @@ public class ObjectPlacer : MonoBehaviour
     }
 
     private Vector3 GetFootprintCenter(Vector3Int gridPosition, Vector2Int footprintSize)
-    {
-        Bounds bounds = activeBoard.TileGridBounds;
-        float cellWidth = bounds.size.x / activeBoard.GridWidth;
-        float cellHeight = bounds.size.z / activeBoard.GridHeight;
-        Vector3 localCenter = new(
-            bounds.min.x + (gridPosition.x + footprintSize.x * 0.5f) * cellWidth,
-            bounds.center.y,
-            bounds.min.z + (gridPosition.y + footprintSize.y * 0.5f) * cellHeight);
+        => activeBoard.GetFootprintCenter(gridPosition, footprintSize);
 
-        return activeBoard.TileGrid.TransformPoint(localCenter) +
-            activeBoard.GridNormal * activeBoard.SurfaceOffset;
-    }
+    private bool CanPlace(Vector3Int gridPosition, Vector2Int footprintSize)
+        => activeGrid.CanPlace(gridPosition, footprintSize) &&
+            (wireSystem == null || wireSystem.IsFootprintClear(gridPosition, footprintSize));
 
     private bool ScaleToFootprint(GameObject instance, Vector2Int footprintSize)
     {

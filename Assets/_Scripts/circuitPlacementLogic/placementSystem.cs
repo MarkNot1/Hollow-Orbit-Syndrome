@@ -14,6 +14,9 @@ public class placementSystem : MonoBehaviour
     [SerializeField]
     private ObjectPlacer objectPlacer;
 
+    [SerializeField]
+    private CircuitWireSystem wireSystem;
+
     private SpecialPrefabInteractable activeCircuit;
     private IPlacementState activeState;
     private MaterialPropertyBlock tileGridPropertyBlock;
@@ -36,6 +39,8 @@ public class placementSystem : MonoBehaviour
 
         if (objectPlacer != null)
             objectPlacer.ClearActiveBoard();
+        if (wireSystem != null)
+            wireSystem.ClearActiveBoard();
     }
 
     private void Update()
@@ -61,6 +66,8 @@ public class placementSystem : MonoBehaviour
         }
 
         objectPlacer.SetActiveBoard(board);
+        if (wireSystem != null)
+            wireSystem.SetActiveBoard(board, objectPlacer.ActiveGrid);
     }
 
     public void ClearActiveCircuit()
@@ -70,6 +77,8 @@ public class placementSystem : MonoBehaviour
 
         if (objectPlacer != null)
             objectPlacer.ClearActiveBoard();
+        if (wireSystem != null)
+            wireSystem.ClearActiveBoard();
     }
 
     public void StartPlacement(int ID)
@@ -95,13 +104,33 @@ public class placementSystem : MonoBehaviour
 
     private void HandlePrimaryAction()
     {
-        activeState?.HandlePrimaryAction();
+        if (activeState != null)
+        {
+            activeState.HandlePrimaryAction();
+            return;
+        }
+
+        if (activeCircuit != null && wireSystem != null && inputManager != null &&
+            wireSystem.TryGetNode(inputManager, out CircuitNode node))
+        {
+            ChangeState(new WiringState(
+                wireSystem,
+                inputManager,
+                node,
+                HandleWiringCompleted));
+        }
     }
 
     private void ToggleRemovalState()
     {
         if (inputManager != null && inputManager.IsPointerOverUI())
             return;
+
+        if (activeState is WiringState)
+        {
+            StopCurrentState();
+            return;
+        }
 
         if (activeState is RemovingState)
         {
@@ -112,12 +141,18 @@ public class placementSystem : MonoBehaviour
         if (activeCircuit == null || objectPlacer == null || inputManager == null)
             return;
 
-        ChangeState(new RemovingState(objectPlacer, inputManager));
+        ChangeState(new RemovingState(objectPlacer, inputManager, wireSystem));
     }
 
     private void HandlePlacementCompleted()
     {
         if (activeState is PlacementState)
+            StopCurrentState();
+    }
+
+    private void HandleWiringCompleted()
+    {
+        if (activeState is WiringState)
             StopCurrentState();
     }
 
@@ -227,6 +262,12 @@ public class placementSystem : MonoBehaviour
             inputManager = FindFirstObjectByType<placementInputManager>();
         if (objectPlacer == null)
             objectPlacer = FindFirstObjectByType<ObjectPlacer>();
+        if (wireSystem == null)
+            wireSystem = FindFirstObjectByType<CircuitWireSystem>();
+        if (wireSystem == null)
+            wireSystem = gameObject.AddComponent<CircuitWireSystem>();
+        if (objectPlacer != null)
+            objectPlacer.SetWireSystem(wireSystem);
     }
 
     private void SubscribeToInput()
