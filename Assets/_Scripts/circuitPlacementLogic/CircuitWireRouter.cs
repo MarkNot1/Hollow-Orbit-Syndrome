@@ -104,21 +104,6 @@ public static class CircuitWireRouter
         return false;
     }
 
-    public static List<Vector2Int> BuildDirectPath(Vector2Int start, Vector2Int goal)
-    {
-        List<Vector2Int> path = new() { start };
-        Vector2Int current = start;
-        while (current != goal)
-        {
-            current += new Vector2Int(
-                Math.Sign(goal.x - current.x),
-                Math.Sign(goal.y - current.y));
-            path.Add(current);
-        }
-
-        return path;
-    }
-
     public static List<Vector2Int> Compress(IReadOnlyList<Vector2Int> path)
     {
         List<Vector2Int> result = new();

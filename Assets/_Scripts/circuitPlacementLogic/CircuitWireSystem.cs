@@ -365,7 +365,7 @@ public sealed class CircuitWireSystem : MonoBehaviour
     {
         if (candidate == null || candidate == sourceNode || candidate.Owner == null ||
             candidate.Owner == sourceNode.Owner || sourceNode.IsConnectedTo(candidate) ||
-            CircuitTopology.WouldShortSupply(sourceNode, candidate))
+            CircuitNode.WouldShortSupply(sourceNode, candidate))
             return null;
 
         return activeBoard.IsInside(candidate.GetGridCell()) ? candidate : null;

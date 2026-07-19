@@ -23,7 +23,7 @@ public class PreviewSystem : MonoBehaviour
             Destroy(previewMaterialInstance);
     }
 
-    public GameObject StartShowingPlacementPreview(GameObject prefab, Vector2Int size)
+    public GameObject StartShowingPlacementPreview(GameObject prefab)
     {
         return StartShowingPreview(prefab, true);
     }

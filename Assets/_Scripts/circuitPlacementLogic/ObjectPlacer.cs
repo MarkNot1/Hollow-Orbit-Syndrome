@@ -28,12 +28,8 @@ public class ObjectPlacer : MonoBehaviour
     private Vector3Int? lastDetectedPosition;
     private PlacedCircuitComponent hoveredRemovalComponent;
 
-    public IReadOnlyDictionary<SpecialPrefabInteractable, GridData> PlacedComponentsByCircuit
-        => placedComponentsByCircuit;
-
-    public bool HasActiveBoard => activeBoard != null && activeGrid != null;
+    private bool HasActiveBoard => activeBoard != null && activeGrid != null;
     public GridData ActiveGrid => activeGrid;
-    public CircuitBoardContext ActiveBoard => activeBoard;
 
     public event Action<PlacedCircuitComponent> ComponentPlaced;
     public event Action<PlacedCircuitComponent> ComponentRemoved;
@@ -101,9 +97,7 @@ public class ObjectPlacer : MonoBehaviour
             return false;
         }
 
-        GameObject previewInstance = preview.StartShowingPlacementPreview(
-            selectedComponent.Prefab,
-            selectedFootprint);
+        GameObject previewInstance = preview.StartShowingPlacementPreview(selectedComponent.Prefab);
 
         if (previewInstance == null)
         {

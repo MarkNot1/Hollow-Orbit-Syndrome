@@ -45,6 +45,12 @@ public sealed class CircuitSimulationResult
         Dictionary<string, double> nodeVoltages,
         Dictionary<CircuitElement, CircuitElementResult> elements)
         => new(true, string.Empty, nodeVoltages, elements);
+
+    public double GetNodeVoltage(CircuitNode node)
+    {
+        string name = CircuitSimulationService.GetNodeName(node);
+        return name == "0" ? 0d : NodeVoltages.TryGetValue(name, out double voltage) ? voltage : 0d;
+    }
 }
 
 public static class CircuitSimulationService
@@ -90,8 +96,8 @@ public static class CircuitSimulationService
 
                 foreach (CircuitElement element in topology.Elements)
                 {
-                    double positive = GetNodeVoltage(nodeVoltages, element.Terminal1.SpiceNodeName);
-                    double negative = GetNodeVoltage(nodeVoltages, element.Terminal2.SpiceNodeName);
+                    double positive = GetNodeVoltage(nodeVoltages, GetNodeName(element.Terminal1));
+                    double negative = GetNodeVoltage(nodeVoltages, GetNodeName(element.Terminal2));
                     double current = TryGetCurrent(currentExports[element], element.Kind);
                     elementResults[element] = new CircuitElementResult(positive - negative, current);
                 }
@@ -110,8 +116,8 @@ public static class CircuitSimulationService
 
     private static void AddElement(Circuit circuit, CircuitElement element)
     {
-        string first = element.Terminal1.SpiceNodeName;
-        string second = element.Terminal2.SpiceNodeName;
+        string first = GetNodeName(element.Terminal1);
+        string second = GetNodeName(element.Terminal2);
         switch (element.Kind)
         {
             case CircuitElementKind.Battery:
@@ -141,6 +147,14 @@ public static class CircuitSimulationService
         => nodeName == "0"
             ? 0d
             : voltages.TryGetValue(nodeName, out double value) ? value : 0d;
+
+    public static string GetNodeName(CircuitNode node)
+    {
+        string netName = node?.NetName;
+        return string.Equals(netName, "GND", StringComparison.OrdinalIgnoreCase) || netName == "0"
+            ? "0"
+            : netName;
+    }
 
     private static double TryGetCurrent(RealPropertyExport export, CircuitElementKind kind)
     {

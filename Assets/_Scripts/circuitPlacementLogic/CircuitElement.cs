@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 public enum CircuitElementKind
@@ -86,9 +85,6 @@ public sealed class CircuitElement : MonoBehaviour
     public bool HasValidTerminals
         => terminal1 != null && terminal2 != null && terminal1 != terminal2;
 
-    public IReadOnlyList<CircuitNode> GetTerminals()
-        => new[] { terminal1, terminal2 };
-
     internal void AssignTerminalLabels(string first, string second)
     {
         ResolveTerminals();
@@ -101,7 +97,7 @@ public sealed class CircuitElement : MonoBehaviour
 
     public bool TrySetValue(double newValue)
     {
-        if (!double.IsFinite(newValue) || newValue <= 0d || Math.Abs(value - newValue) < double.Epsilon)
+        if (!double.IsFinite(newValue) || newValue <= 0d || value == newValue)
             return false;
 
         value = newValue;

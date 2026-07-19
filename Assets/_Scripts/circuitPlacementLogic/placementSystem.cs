@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class placementSystem : MonoBehaviour
@@ -17,38 +18,30 @@ public class placementSystem : MonoBehaviour
     [SerializeField]
     private CircuitWireSystem wireSystem;
 
-    [SerializeField]
-    private CircuitSimulationSystem simulationSystem;
-
-    [SerializeField]
-    private CircuitComponentHoverDisplay hoverDisplay;
-
     private SpecialPrefabInteractable activeCircuit;
     private IPlacementState activeState;
     private MaterialPropertyBlock tileGridPropertyBlock;
 
-    private void Awake()
-    {
-        ResolveReferences();
-    }
+    public CircuitBoardContext ActiveBoard { get; private set; }
+
+    public event Action<CircuitBoardContext> ActiveBoardChanged;
+    public event Action CircuitChanged;
 
     private void OnEnable()
     {
-        ResolveReferences();
+        ValidateReferences();
+        if (objectPlacer != null)
+            objectPlacer.SetWireSystem(wireSystem);
         SubscribeToInput();
+        SubscribeToCircuitChanges();
     }
 
     private void OnDisable()
     {
         UnsubscribeFromInput();
+        UnsubscribeFromCircuitChanges();
         StopCurrentState();
-
-        if (objectPlacer != null)
-            objectPlacer.ClearActiveBoard();
-        if (wireSystem != null)
-            wireSystem.ClearActiveBoard();
-        if (simulationSystem != null)
-            simulationSystem.ClearActiveBoard();
+        DeactivateBoard();
     }
 
     private void Update()
@@ -69,32 +62,22 @@ public class placementSystem : MonoBehaviour
 
         if (!TryConfigureCircuitBoard(out CircuitBoardContext board))
         {
-            objectPlacer.ClearActiveBoard();
-            if (wireSystem != null)
-                wireSystem.ClearActiveBoard();
-            if (simulationSystem != null)
-                simulationSystem.ClearActiveBoard();
+            DeactivateBoard();
             return;
         }
 
+        ActiveBoard = board;
         objectPlacer.SetActiveBoard(board);
         if (wireSystem != null)
             wireSystem.SetActiveBoard(board, objectPlacer.ActiveGrid);
-        if (simulationSystem != null)
-            simulationSystem.SetActiveBoard(board);
+        ActiveBoardChanged?.Invoke(board);
     }
 
     public void ClearActiveCircuit()
     {
         StopCurrentState();
         activeCircuit = null;
-
-        if (objectPlacer != null)
-            objectPlacer.ClearActiveBoard();
-        if (wireSystem != null)
-            wireSystem.ClearActiveBoard();
-        if (simulationSystem != null)
-            simulationSystem.ClearActiveBoard();
+        DeactivateBoard();
     }
 
     public void StartPlacement(int ID)
@@ -272,28 +255,70 @@ public class placementSystem : MonoBehaviour
         tileGridRenderer.SetPropertyBlock(tileGridPropertyBlock);
     }
 
-    private void ResolveReferences()
+    private void ValidateReferences()
     {
         if (inputManager == null)
-            inputManager = FindFirstObjectByType<placementInputManager>();
+            Debug.LogError("Placement input manager is not assigned.", this);
         if (objectPlacer == null)
-            objectPlacer = FindFirstObjectByType<ObjectPlacer>();
+            Debug.LogError("ObjectPlacer is not assigned.", this);
         if (wireSystem == null)
-            wireSystem = FindFirstObjectByType<CircuitWireSystem>();
-        if (wireSystem == null)
-            wireSystem = gameObject.AddComponent<CircuitWireSystem>();
-        if (simulationSystem == null)
-            simulationSystem = GetComponent<CircuitSimulationSystem>();
-        if (simulationSystem == null)
-            simulationSystem = gameObject.AddComponent<CircuitSimulationSystem>();
-        if (hoverDisplay == null)
-            hoverDisplay = GetComponent<CircuitComponentHoverDisplay>();
-        if (hoverDisplay == null)
-            hoverDisplay = gameObject.AddComponent<CircuitComponentHoverDisplay>();
+            Debug.LogError("CircuitWireSystem is not assigned.", this);
+    }
+
+    private void DeactivateBoard()
+    {
         if (objectPlacer != null)
-            objectPlacer.SetWireSystem(wireSystem);
-        simulationSystem.Configure(objectPlacer, wireSystem);
-        hoverDisplay.Configure(inputManager, simulationSystem);
+            objectPlacer.ClearActiveBoard();
+        if (wireSystem != null)
+            wireSystem.ClearActiveBoard();
+
+        bool hadBoard = ActiveBoard != null;
+        ActiveBoard = null;
+        if (hadBoard)
+            ActiveBoardChanged?.Invoke(null);
+    }
+
+    private void SubscribeToCircuitChanges()
+    {
+        CircuitElement.ElectricalValueChanged += HandleElectricalValueChanged;
+        if (objectPlacer != null)
+        {
+            objectPlacer.ComponentPlaced += HandleComponentChanged;
+            objectPlacer.ComponentRemoved += HandleComponentChanged;
+        }
+        if (wireSystem != null)
+        {
+            wireSystem.ConnectionCreated += HandleConnectionChanged;
+            wireSystem.ConnectionRemoved += HandleConnectionChanged;
+        }
+    }
+
+    private void UnsubscribeFromCircuitChanges()
+    {
+        CircuitElement.ElectricalValueChanged -= HandleElectricalValueChanged;
+        if (objectPlacer != null)
+        {
+            objectPlacer.ComponentPlaced -= HandleComponentChanged;
+            objectPlacer.ComponentRemoved -= HandleComponentChanged;
+        }
+        if (wireSystem != null)
+        {
+            wireSystem.ConnectionCreated -= HandleConnectionChanged;
+            wireSystem.ConnectionRemoved -= HandleConnectionChanged;
+        }
+    }
+
+    private void HandleComponentChanged(PlacedCircuitComponent _)
+        => CircuitChanged?.Invoke();
+
+    private void HandleConnectionChanged(WireConnection _)
+        => CircuitChanged?.Invoke();
+
+    private void HandleElectricalValueChanged(CircuitElement element)
+    {
+        if (element != null && ActiveBoard?.Circuit != null &&
+            element.transform.IsChildOf(ActiveBoard.Circuit.transform))
+            CircuitChanged?.Invoke();
     }
 
     private void SubscribeToInput()

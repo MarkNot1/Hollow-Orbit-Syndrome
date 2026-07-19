@@ -11,9 +11,6 @@ public class placementInputManager : MonoBehaviour
     private Vector3 lastPosition;
     private readonly RaycastHit[] raycastHits = new RaycastHit[32];
 
-    [SerializeField]
-    LayerMask placementLayerMask;
-
     public event Action OnClicked, OnRightClicked, OnExit;
 
     private void Awake()
@@ -127,18 +124,4 @@ public class placementInputManager : MonoBehaviour
         return component != null;
     }
 
-    public Vector3 GetSelectedMapPosition()
-    {
-        if (sceneCamera == null || Mouse.current == null)
-            return lastPosition;
-
-        Vector2 mousePos = Mouse.current.position.ReadValue();
-        Ray ray = sceneCamera.ScreenPointToRay(mousePos);
-        RaycastHit hit;
-        if (Physics.Raycast(ray, out hit, 100, placementLayerMask))
-        {
-            lastPosition = hit.point;
-        }
-        return lastPosition;
-    }
 }

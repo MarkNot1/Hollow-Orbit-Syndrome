@@ -5,17 +5,13 @@ using UnityEngine;
 
 public sealed class CircuitNet
 {
-    public string DisplayName { get; }
     public string SpiceName { get; }
-    public IReadOnlyList<CircuitNode> Nodes { get; }
 
-    public CircuitNet(string displayName, IReadOnlyList<CircuitNode> nodes)
+    public CircuitNet(string displayName)
     {
-        DisplayName = displayName;
         SpiceName = string.Equals(displayName, "GND", StringComparison.OrdinalIgnoreCase) || displayName == "0"
             ? "0"
             : displayName;
-        Nodes = nodes;
     }
 }
 
@@ -44,11 +40,7 @@ public static class CircuitTopology
         List<string> errors = new();
         List<CircuitElement> elements = placedComponents
             .Where(component => component != null)
-            .Select(component =>
-            {
-                component.ConfigureNodes();
-                return component.Element;
-            })
+            .Select(component => component.Element)
             .Where(element => element != null)
             .Distinct()
             .OrderBy(element => element.Owner.GridPosition.y)
@@ -67,11 +59,16 @@ public static class CircuitTopology
                 errors.Add($"{element.EntityName} has an invalid electrical value.");
         }
 
-        List<CircuitNode> nodes = elements
-            .Where(element => element.HasValidTerminals)
-            .SelectMany(element => element.GetTerminals())
-            .Distinct()
-            .ToList();
+        List<CircuitNode> nodes = new(elements.Count * 2);
+        foreach (CircuitElement element in elements)
+        {
+            if (!element.HasValidTerminals)
+                continue;
+            if (!nodes.Contains(element.Terminal1))
+                nodes.Add(element.Terminal1);
+            if (!nodes.Contains(element.Terminal2))
+                nodes.Add(element.Terminal2);
+        }
 
         DisjointSet<CircuitNode> sets = new(nodes);
         foreach (CircuitNode node in nodes)
@@ -105,7 +102,7 @@ public static class CircuitTopology
 
             foreach (CircuitNode node in group)
                 node.SetNetName(netName);
-            nets.Add(new CircuitNet(netName, group));
+            nets.Add(new CircuitNet(netName));
         }
 
         List<CircuitElement> batteries = elements
@@ -121,17 +118,6 @@ public static class CircuitTopology
         }
 
         return new CircuitTopologyResult(elements, nets, errors.Distinct().ToList());
-    }
-
-    public static bool WouldShortSupply(CircuitNode first, CircuitNode second)
-    {
-        if (first == null || second == null)
-            return false;
-
-        string firstName = first.NetName;
-        string secondName = second.NetName;
-        return LabelEquals(firstName, "VCC") && IsGroundLabel(secondName) ||
-            IsGroundLabel(firstName) && LabelEquals(secondName, "VCC");
     }
 
     private static void AssignMissingTerminalLabels(IReadOnlyList<CircuitElement> elements)

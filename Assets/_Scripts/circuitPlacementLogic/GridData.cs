@@ -7,10 +7,6 @@ public class GridData
     private readonly int width;
     private readonly int height;
 
-    public IReadOnlyDictionary<Vector3Int, PlacedCircuitComponent> PlacedComponents => placedComponents;
-    public int Width => width;
-    public int Height => height;
-
     public GridData(int width, int height)
     {
         this.width = Mathf.Max(1, width);
@@ -81,15 +77,13 @@ public class GridData
         if (!TryGetPlacement(gridPosition, out component))
             return false;
 
-        List<Vector3Int> cellsToRemove = new();
-        foreach (KeyValuePair<Vector3Int, PlacedCircuitComponent> entry in placedComponents)
+        Vector3Int origin = component.GridPosition;
+        Vector2Int size = component.FootprintSize;
+        for (int x = 0; x < size.x; x++)
         {
-            if (entry.Value == null || entry.Value == component)
-                cellsToRemove.Add(entry.Key);
+            for (int y = 0; y < size.y; y++)
+                placedComponents.Remove(origin + new Vector3Int(x, y, 0));
         }
-
-        for (int i = 0; i < cellsToRemove.Count; i++)
-            placedComponents.Remove(cellsToRemove[i]);
 
         return true;
     }
