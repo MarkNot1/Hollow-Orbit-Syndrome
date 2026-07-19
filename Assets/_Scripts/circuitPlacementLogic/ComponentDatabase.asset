@@ -29,3 +29,7 @@ MonoBehaviour:
     <ID>k__BackingField: 3
     <Size>k__BackingField: {x: 1, y: 1}
     <Prefab>k__BackingField: {fileID: 7455758672981159970, guid: d6e7e4e6f2b356d469853027448d6ceb, type: 3}
+  - <componentName>k__BackingField: Battery
+    <ID>k__BackingField: 4
+    <Size>k__BackingField: {x: 1, y: 2}
+    <Prefab>k__BackingField: {fileID: 1860522251568171429, guid: 1fbf0ae651186884498094368a05c1d9, type: 3}

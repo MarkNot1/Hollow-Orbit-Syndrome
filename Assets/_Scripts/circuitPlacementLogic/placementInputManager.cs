@@ -95,6 +95,38 @@ public class placementInputManager : MonoBehaviour
         return component != null;
     }
 
+    public bool TryGetCircuitComponentBody(out PlacedCircuitComponent component, float distance = 100f)
+    {
+        component = null;
+        if (!TryGetPointerRay(out Ray ray))
+            return false;
+
+        int count = Physics.RaycastNonAlloc(
+            ray,
+            raycastHits,
+            distance,
+            ~0,
+            QueryTriggerInteraction.Collide);
+        float closestDistance = float.PositiveInfinity;
+
+        for (int i = 0; i < count; i++)
+        {
+            Collider hitCollider = raycastHits[i].collider;
+            if (hitCollider.GetComponentInParent<CircuitNode>() != null)
+                continue;
+
+            PlacedCircuitComponent candidate =
+                hitCollider.GetComponentInParent<PlacedCircuitComponent>();
+            if (candidate != null && raycastHits[i].distance < closestDistance)
+            {
+                closestDistance = raycastHits[i].distance;
+                component = candidate;
+            }
+        }
+
+        return component != null;
+    }
+
     public Vector3 GetSelectedMapPosition()
     {
         if (sceneCamera == null || Mouse.current == null)

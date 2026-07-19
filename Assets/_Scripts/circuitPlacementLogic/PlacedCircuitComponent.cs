@@ -14,6 +14,7 @@ public class PlacedCircuitComponent : MonoBehaviour
     public int ComponentId => componentId;
     public Vector3Int GridPosition => gridPosition;
     public Vector2Int FootprintSize => footprintSize;
+    public CircuitElement Element { get; private set; }
 
     public void Initialize(int id, Vector3Int position, Vector2Int size)
     {
@@ -40,5 +41,15 @@ public class PlacedCircuitComponent : MonoBehaviour
 
         foreach (CircuitNode node in nodes)
             node.Initialize(this);
+
+        Element = GetComponent<CircuitElement>();
+        if (Element == null && componentId >= 0 && componentId <= 4)
+            Element = gameObject.AddComponent<CircuitElement>();
+
+        if (Element != null)
+        {
+            Element.ConfigureFromComponentId(componentId);
+            Element.Initialize(this);
+        }
     }
 }

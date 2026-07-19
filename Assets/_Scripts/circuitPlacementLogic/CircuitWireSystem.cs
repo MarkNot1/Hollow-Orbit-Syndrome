@@ -5,6 +5,7 @@ using UnityEngine;
 public sealed class CircuitWireSystem : MonoBehaviour
 {
     private const string WireRootName = "Circuit Wires";
+    private const float DefaultWireWidth = 0.003f;
 
     [SerializeField]
     private GameObject wirePrefab;
@@ -12,8 +13,8 @@ public sealed class CircuitWireSystem : MonoBehaviour
     [SerializeField]
     private Material wireMaterial;
 
-    [SerializeField, Min(0.002f)]
-    private float wireWidth = 0.025f;
+    [SerializeField, Min(0.0005f)]
+    private float wireWidth = DefaultWireWidth;
 
     [SerializeField]
     private float wireSurfaceOffset = 0.004f;
@@ -101,12 +102,11 @@ public sealed class CircuitWireSystem : MonoBehaviour
         if (activeBoard == null || activeGrid == null || node == null || node.Owner == null)
             return false;
 
-        Vector3Int sourceCell = node.GetGridCell();
-        if (!activeBoard.IsInside(sourceCell))
+        if (!TryGetEscapeCell(node, out Vector2Int sourceEscape))
             return false;
 
         sourceNode = node;
-        committedPath.Add(ToVector2(sourceCell));
+        committedPath.Add(sourceEscape);
         previewWire = CreateWire("Wire Preview", EnsureWireRoot());
         lastTargetCell = null;
         return previewWire != null;
@@ -257,7 +257,13 @@ public sealed class CircuitWireSystem : MonoBehaviour
     {
         currentTail.Clear();
         Vector2Int start = committedPath[^1];
-        Vector2Int? destinationCell = destination != null ? ToVector2(destination.GetGridCell()) : null;
+        if (destination != null && !TryGetEscapeCell(destination, out targetCell))
+        {
+            currentTailValid = false;
+            currentTail.Add(start);
+            return;
+        }
+
         HashSet<Vector2Int> committed = new(committedPath);
         committed.Remove(start);
 
@@ -266,13 +272,16 @@ public sealed class CircuitWireSystem : MonoBehaviour
             activeBoard.GridHeight,
             start,
             targetCell,
-            cell => committed.Contains(cell) || IsComponentBlocked(cell, destinationCell),
+            cell => committed.Contains(cell) || IsComponentBlocked(cell),
             IsCommittedMoveBlocked,
             out List<Vector2Int> route);
 
-        currentTail.AddRange(currentTailValid
-            ? route
-            : CircuitWireRouter.BuildDirectPath(start, targetCell));
+        if (currentTailValid)
+            currentTail.AddRange(route);
+        else
+            // Never draw a fallback segment through an occupied footprint.
+            // Keep only the safe committed endpoint until a route exists.
+            currentTail.Add(start);
     }
 
     private bool IsCommittedMoveBlocked(Vector2Int from, Vector2Int to)
@@ -297,19 +306,66 @@ public sealed class CircuitWireSystem : MonoBehaviour
         return false;
     }
 
-    private bool IsComponentBlocked(Vector2Int cell, Vector2Int? destinationCell)
+    private bool IsComponentBlocked(Vector2Int cell)
+        => activeGrid.IsOccupied(new Vector3Int(cell.x, cell.y, 0));
+
+    private bool TryGetEscapeCell(CircuitNode node, out Vector2Int escapeCell)
     {
-        Vector2Int sourceCell = ToVector2(sourceNode.GetGridCell());
-        if (cell == sourceCell || destinationCell.HasValue && cell == destinationCell.Value)
+        escapeCell = default;
+        if (node?.Owner == null || activeBoard == null || activeGrid == null)
             return false;
 
-        return activeGrid.IsOccupied(new Vector3Int(cell.x, cell.y, 0));
+        PlacedCircuitComponent owner = node.Owner;
+        Vector3Int origin = owner.GridPosition;
+        Vector2Int size = owner.FootprintSize;
+        Vector3 footprintCenter = activeBoard.GetFootprintCenter(origin, size);
+        Vector3 terminalOffset = node.ConnectionPoint.position - footprintCenter;
+        float horizontalOffset = Vector3.Dot(terminalOffset, activeBoard.GridRight);
+        float verticalOffset = Vector3.Dot(terminalOffset, activeBoard.GridForward);
+        float halfWidth = activeBoard.CellWorldWidth * size.x * 0.5f;
+        float halfHeight = activeBoard.CellWorldHeight * size.y * 0.5f;
+
+        int relativeX = Mathf.Clamp(
+            Mathf.FloorToInt(horizontalOffset / activeBoard.CellWorldWidth + size.x * 0.5f),
+            0,
+            size.x - 1);
+        int relativeY = Mathf.Clamp(
+            Mathf.FloorToInt(verticalOffset / activeBoard.CellWorldHeight + size.y * 0.5f),
+            0,
+            size.y - 1);
+
+        EscapeCandidate[] candidates =
+        {
+            new(new Vector2Int(origin.x - 1, origin.y + relativeY),
+                Mathf.Abs(horizontalOffset + halfWidth)),
+            new(new Vector2Int(origin.x + size.x, origin.y + relativeY),
+                Mathf.Abs(halfWidth - horizontalOffset)),
+            new(new Vector2Int(origin.x + relativeX, origin.y - 1),
+                Mathf.Abs(verticalOffset + halfHeight)),
+            new(new Vector2Int(origin.x + relativeX, origin.y + size.y),
+                Mathf.Abs(halfHeight - verticalOffset))
+        };
+        Array.Sort(candidates, (first, second) => first.Distance.CompareTo(second.Distance));
+
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            Vector2Int candidate = candidates[i].Cell;
+            Vector3Int candidate3 = new(candidate.x, candidate.y, 0);
+            if (activeBoard.IsInside(candidate3) && !activeGrid.IsOccupied(candidate3))
+            {
+                escapeCell = candidate;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private CircuitNode GetValidDestination(CircuitNode candidate)
     {
         if (candidate == null || candidate == sourceNode || candidate.Owner == null ||
-            candidate.Owner == sourceNode.Owner || sourceNode.IsConnectedTo(candidate))
+            candidate.Owner == sourceNode.Owner || sourceNode.IsConnectedTo(candidate) ||
+            CircuitTopology.WouldShortSupply(sourceNode, candidate))
             return null;
 
         return activeBoard.IsInside(candidate.GetGridCell()) ? candidate : null;
@@ -389,7 +445,7 @@ public sealed class CircuitWireSystem : MonoBehaviour
     {
         GameObject instance = wirePrefab != null
             ? Instantiate(wirePrefab, parent)
-            : new GameObject(objectName, typeof(LineRenderer), typeof(WireConnection));
+            : new GameObject(objectName, typeof(MeshFilter), typeof(MeshRenderer), typeof(WireConnection));
         instance.name = objectName;
         if (instance.transform.parent != parent)
             instance.transform.SetParent(parent, false);
@@ -403,8 +459,14 @@ public sealed class CircuitWireSystem : MonoBehaviour
         WireConnection wire = instance.GetComponent<WireConnection>();
         if (wire == null)
             wire = instance.AddComponent<WireConnection>();
-        if (instance.GetComponent<LineRenderer>() == null)
-            instance.AddComponent<LineRenderer>();
+        if (instance.GetComponent<MeshFilter>() == null)
+            instance.AddComponent<MeshFilter>();
+        if (instance.GetComponent<MeshRenderer>() == null)
+            instance.AddComponent<MeshRenderer>();
+
+        LineRenderer obsoleteLine = instance.GetComponent<LineRenderer>();
+        if (obsoleteLine != null)
+            Destroy(obsoleteLine);
         return wire;
     }
 
@@ -483,4 +545,16 @@ public sealed class CircuitWireSystem : MonoBehaviour
 
     private static Vector2Int ToVector2(Vector3Int value)
         => new(value.x, value.y);
+
+    private readonly struct EscapeCandidate
+    {
+        public Vector2Int Cell { get; }
+        public float Distance { get; }
+
+        public EscapeCandidate(Vector2Int cell, float distance)
+        {
+            Cell = cell;
+            Distance = distance;
+        }
+    }
 }

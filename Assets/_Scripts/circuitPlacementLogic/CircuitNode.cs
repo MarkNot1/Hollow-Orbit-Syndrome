@@ -12,9 +12,20 @@ public sealed class CircuitNode : MonoBehaviour
     [SerializeField]
     private Transform connectionPoint;
 
+    [SerializeField]
+    private string terminalLabel;
+
+    [SerializeField]
+    private string netName;
+
     private readonly HashSet<WireConnection> connections = new();
 
     public string TerminalId => string.IsNullOrWhiteSpace(terminalId) ? name : terminalId;
+    public string TerminalLabel => terminalLabel;
+    public string NetName => string.IsNullOrWhiteSpace(netName) ? terminalLabel : netName;
+    public string SpiceNodeName => IsGroundName(NetName)
+        ? "0"
+        : NetName;
     public Vector2Int CellOffset => cellOffset;
     public Transform ConnectionPoint => connectionPoint != null ? connectionPoint : transform;
     public PlacedCircuitComponent Owner { get; private set; }
@@ -58,4 +69,17 @@ public sealed class CircuitNode : MonoBehaviour
 
     internal void Detach(WireConnection connection)
         => connections.Remove(connection);
+
+    internal void SetTerminalLabel(string value)
+    {
+        terminalLabel = value?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(netName))
+            netName = terminalLabel;
+    }
+
+    internal void SetNetName(string value)
+        => netName = value?.Trim() ?? string.Empty;
+
+    private static bool IsGroundName(string value)
+        => string.Equals(value, "GND", System.StringComparison.OrdinalIgnoreCase) || value == "0";
 }

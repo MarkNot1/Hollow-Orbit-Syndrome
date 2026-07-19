@@ -17,6 +17,12 @@ public class placementSystem : MonoBehaviour
     [SerializeField]
     private CircuitWireSystem wireSystem;
 
+    [SerializeField]
+    private CircuitSimulationSystem simulationSystem;
+
+    [SerializeField]
+    private CircuitComponentHoverDisplay hoverDisplay;
+
     private SpecialPrefabInteractable activeCircuit;
     private IPlacementState activeState;
     private MaterialPropertyBlock tileGridPropertyBlock;
@@ -41,6 +47,8 @@ public class placementSystem : MonoBehaviour
             objectPlacer.ClearActiveBoard();
         if (wireSystem != null)
             wireSystem.ClearActiveBoard();
+        if (simulationSystem != null)
+            simulationSystem.ClearActiveBoard();
     }
 
     private void Update()
@@ -62,12 +70,18 @@ public class placementSystem : MonoBehaviour
         if (!TryConfigureCircuitBoard(out CircuitBoardContext board))
         {
             objectPlacer.ClearActiveBoard();
+            if (wireSystem != null)
+                wireSystem.ClearActiveBoard();
+            if (simulationSystem != null)
+                simulationSystem.ClearActiveBoard();
             return;
         }
 
         objectPlacer.SetActiveBoard(board);
         if (wireSystem != null)
             wireSystem.SetActiveBoard(board, objectPlacer.ActiveGrid);
+        if (simulationSystem != null)
+            simulationSystem.SetActiveBoard(board);
     }
 
     public void ClearActiveCircuit()
@@ -79,6 +93,8 @@ public class placementSystem : MonoBehaviour
             objectPlacer.ClearActiveBoard();
         if (wireSystem != null)
             wireSystem.ClearActiveBoard();
+        if (simulationSystem != null)
+            simulationSystem.ClearActiveBoard();
     }
 
     public void StartPlacement(int ID)
@@ -266,8 +282,18 @@ public class placementSystem : MonoBehaviour
             wireSystem = FindFirstObjectByType<CircuitWireSystem>();
         if (wireSystem == null)
             wireSystem = gameObject.AddComponent<CircuitWireSystem>();
+        if (simulationSystem == null)
+            simulationSystem = GetComponent<CircuitSimulationSystem>();
+        if (simulationSystem == null)
+            simulationSystem = gameObject.AddComponent<CircuitSimulationSystem>();
+        if (hoverDisplay == null)
+            hoverDisplay = GetComponent<CircuitComponentHoverDisplay>();
+        if (hoverDisplay == null)
+            hoverDisplay = gameObject.AddComponent<CircuitComponentHoverDisplay>();
         if (objectPlacer != null)
             objectPlacer.SetWireSystem(wireSystem);
+        simulationSystem.Configure(objectPlacer, wireSystem);
+        hoverDisplay.Configure(inputManager, simulationSystem);
     }
 
     private void SubscribeToInput()

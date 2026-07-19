@@ -35,6 +35,7 @@ public class PlayerInput : MonoBehaviour
     private InputAction _flyAction;
     private InputAction _destroyBlockAction;
     private InputAction _interactAction;
+    private InputAction _circuitDetailsAction;
     private bool gameplayInputBlocked;
 
     private void Awake()
@@ -59,6 +60,7 @@ public class PlayerInput : MonoBehaviour
         _flyAction = _playerMap.FindAction("Fly");
         _destroyBlockAction = _playerMap.FindAction("DestroyBlock");
         _interactAction = _playerMap.FindAction("Interact");
+        _circuitDetailsAction = _playerMap.FindAction("CircuitDetails");
 
         if (_flyAction != null)
             _flyAction.performed += OnFlyPerformed;
@@ -175,6 +177,26 @@ public class PlayerInput : MonoBehaviour
         MousePosition = Vector2.zero;
         IsJumping = false;
         RunningPressed = false;
+    }
+
+    public bool IsCircuitDetailsPressed()
+        => _circuitDetailsAction != null && _circuitDetailsAction.IsPressed();
+
+    public string GetCircuitDetailsBindingDisplayName()
+    {
+        if (_circuitDetailsAction == null)
+            return "CTRL";
+
+        for (int i = 0; i < _circuitDetailsAction.bindings.Count; i++)
+        {
+            string displayName = _circuitDetailsAction.GetBindingDisplayString(
+                i,
+                InputBinding.DisplayStringOptions.DontIncludeInteractions);
+            if (!string.IsNullOrWhiteSpace(displayName))
+                return displayName.Contains("Ctrl", StringComparison.OrdinalIgnoreCase) ? "CTRL" : displayName;
+        }
+
+        return "CTRL";
     }
 
     public string GetInteractBindingDisplayName()

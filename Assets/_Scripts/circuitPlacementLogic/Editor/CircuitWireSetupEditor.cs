@@ -93,18 +93,12 @@ public static class CircuitWireSetupEditor
 
     private static GameObject EnsureWirePrefab(Material material, int wireLayer)
     {
-        GameObject instance = new("CircuitWire", typeof(LineRenderer), typeof(WireConnection));
+        GameObject instance = new("CircuitWire", typeof(MeshFilter), typeof(MeshRenderer), typeof(WireConnection));
         instance.layer = wireLayer;
-        LineRenderer line = instance.GetComponent<LineRenderer>();
-        line.sharedMaterial = material;
-        line.useWorldSpace = true;
-        line.alignment = LineAlignment.View;
-        line.startWidth = 0.025f;
-        line.endWidth = 0.025f;
-        line.numCornerVertices = 0;
-        line.numCapVertices = 0;
-        line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        line.receiveShadows = false;
+        MeshRenderer renderer = instance.GetComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(instance, WirePrefabPath);
         Object.DestroyImmediate(instance);

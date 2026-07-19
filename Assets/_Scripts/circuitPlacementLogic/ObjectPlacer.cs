@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -22,6 +23,7 @@ public class ObjectPlacer : MonoBehaviour
     private CircuitBoardContext activeBoard;
     private GridData activeGrid;
     private componentData selectedComponent;
+    private Vector2Int selectedFootprint;
     private int placementStartedFrame = -1;
     private Vector3Int? lastDetectedPosition;
     private PlacedCircuitComponent hoveredRemovalComponent;
@@ -31,6 +33,10 @@ public class ObjectPlacer : MonoBehaviour
 
     public bool HasActiveBoard => activeBoard != null && activeGrid != null;
     public GridData ActiveGrid => activeGrid;
+    public CircuitBoardContext ActiveBoard => activeBoard;
+
+    public event Action<PlacedCircuitComponent> ComponentPlaced;
+    public event Action<PlacedCircuitComponent> ComponentRemoved;
 
     public void SetWireSystem(CircuitWireSystem system)
         => wireSystem = system;
@@ -86,7 +92,9 @@ public class ObjectPlacer : MonoBehaviour
             return false;
         }
 
-        if (selectedComponent.Prefab == null || selectedComponent.Size.x <= 0 || selectedComponent.Size.y <= 0)
+        selectedFootprint = GetRequiredFootprint(selectedComponent);
+
+        if (selectedComponent.Prefab == null || selectedFootprint.x <= 0 || selectedFootprint.y <= 0)
         {
             Debug.LogError($"Component with ID {componentId} has an invalid prefab or footprint.", this);
             selectedComponent = null;
@@ -95,7 +103,7 @@ public class ObjectPlacer : MonoBehaviour
 
         GameObject previewInstance = preview.StartShowingPlacementPreview(
             selectedComponent.Prefab,
-            selectedComponent.Size);
+            selectedFootprint);
 
         if (previewInstance == null)
         {
@@ -104,7 +112,7 @@ public class ObjectPlacer : MonoBehaviour
         }
 
         previewInstance.transform.rotation = GetBoardRotation();
-        if (!ScaleToFootprint(previewInstance, selectedComponent.Size))
+        if (!ScaleToFootprint(previewInstance, selectedFootprint))
         {
             Debug.LogWarning($"Could not fit the preview for component ID {componentId} to the board.", this);
             preview.StopShowingPreview();
@@ -124,7 +132,7 @@ public class ObjectPlacer : MonoBehaviour
 
         if (!TryGetCircuitCell(
                 inputManager,
-                selectedComponent.Size,
+                selectedFootprint,
                 out Vector3Int gridPosition,
                 out Vector3 footprintCenter))
         {
@@ -138,7 +146,7 @@ public class ObjectPlacer : MonoBehaviour
             return;
 
         lastDetectedPosition = gridPosition;
-        bool placementValidity = CanPlace(gridPosition, selectedComponent.Size);
+        bool placementValidity = CanPlace(gridPosition, selectedFootprint);
         preview.UpdatePosition(footprintCenter, placementValidity);
         AlignToFootprint(preview.PreviewObject, footprintCenter);
     }
@@ -151,10 +159,10 @@ public class ObjectPlacer : MonoBehaviour
 
         if (!TryGetCircuitCell(
                 inputManager,
-                selectedComponent.Size,
+                selectedFootprint,
                 out Vector3Int gridPosition,
                 out Vector3 footprintCenter) ||
-            !CanPlace(gridPosition, selectedComponent.Size))
+            !CanPlace(gridPosition, selectedFootprint))
             return false;
 
         GameObject instance = Instantiate(
@@ -163,7 +171,7 @@ public class ObjectPlacer : MonoBehaviour
             GetBoardRotation(),
             EnsureCircuitPlacementRoot());
 
-        if (!ScaleToFootprint(instance, selectedComponent.Size))
+        if (!ScaleToFootprint(instance, selectedFootprint))
         {
             Debug.LogWarning($"Could not fit component ID {selectedComponent.ID} to the board.", this);
             Destroy(instance);
@@ -176,7 +184,7 @@ public class ObjectPlacer : MonoBehaviour
         if (metadata == null)
             metadata = instance.AddComponent<PlacedCircuitComponent>();
 
-        metadata.Initialize(selectedComponent.ID, gridPosition, selectedComponent.Size);
+        metadata.Initialize(selectedComponent.ID, gridPosition, selectedFootprint);
         if (!activeGrid.TryRegister(metadata))
         {
             Debug.LogWarning("The component footprint became occupied before it could be registered.", this);
@@ -184,12 +192,15 @@ public class ObjectPlacer : MonoBehaviour
             return false;
         }
 
+        ComponentPlaced?.Invoke(metadata);
+
         return true;
     }
 
     public void EndPlacement()
     {
         selectedComponent = null;
+        selectedFootprint = Vector2Int.zero;
         placementStartedFrame = -1;
         lastDetectedPosition = null;
 
@@ -277,6 +288,7 @@ public class ObjectPlacer : MonoBehaviour
         if (component != null)
         {
             wireSystem?.RemoveConnections(component);
+            ComponentRemoved?.Invoke(component);
             Destroy(component.gameObject);
         }
 
@@ -308,12 +320,20 @@ public class ObjectPlacer : MonoBehaviour
                 continue;
             }
 
-            if (component.FootprintSize != data.Size)
+            Vector2Int requiredFootprint = GetRequiredFootprint(data);
+            if (component.FootprintSize != requiredFootprint)
             {
-                Debug.LogWarning(
-                    $"Skipping authored component '{component.name}': its footprint does not match component ID {component.ComponentId}.",
-                    component);
-                continue;
+                if (component.ComponentId == 4)
+                {
+                    component.Initialize(component.ComponentId, component.GridPosition, requiredFootprint);
+                }
+                else
+                {
+                    Debug.LogWarning(
+                        $"Skipping authored component '{component.name}': its footprint does not match component ID {component.ComponentId}.",
+                        component);
+                    continue;
+                }
             }
 
             if (!activeGrid.TryRegister(component))
@@ -338,6 +358,11 @@ public class ObjectPlacer : MonoBehaviour
         data = componentDatabase.componentDataList.Find(candidate => candidate.ID == componentId);
         return data != null;
     }
+
+    private static Vector2Int GetRequiredFootprint(componentData data)
+        // Grid x is horizontal and grid y is vertical on the circuit board.
+        // The battery always occupies one column and two vertical cells.
+        => data != null && data.ID == 4 ? new Vector2Int(1, 2) : data?.Size ?? Vector2Int.zero;
 
     private bool TryGetCircuitCell(
         placementInputManager inputManager,
