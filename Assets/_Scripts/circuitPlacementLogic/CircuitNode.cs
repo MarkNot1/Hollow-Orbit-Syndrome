@@ -26,11 +26,26 @@ public sealed class CircuitNode : MonoBehaviour
     public Vector2Int CellOffset => cellOffset;
     public Transform ConnectionPoint => connectionPoint != null ? connectionPoint : transform;
     public PlacedCircuitComponent Owner { get; private set; }
+    public OpenCircuitSlot SlotOwner { get; private set; }
+    public bool HasHost => Owner != null || SlotOwner != null;
     public IReadOnlyCollection<WireConnection> Connections => connections;
 
     public void Initialize(PlacedCircuitComponent owner)
     {
         Owner = owner;
+        SlotOwner = null;
+        if (string.IsNullOrWhiteSpace(terminalId))
+            terminalId = name;
+
+        int nodeLayer = LayerMask.NameToLayer("CircuitNode");
+        if (nodeLayer >= 0)
+            gameObject.layer = nodeLayer;
+    }
+
+    public void Initialize(OpenCircuitSlot owner)
+    {
+        SlotOwner = owner;
+        Owner = null;
         if (string.IsNullOrWhiteSpace(terminalId))
             terminalId = name;
 
@@ -41,10 +56,9 @@ public sealed class CircuitNode : MonoBehaviour
 
     public Vector3Int GetGridCell()
     {
-        if (Owner == null)
-            return default;
-
-        return Owner.GridPosition + new Vector3Int(cellOffset.x, cellOffset.y, 0);
+        if (Owner != null)
+            return Owner.GridPosition + new Vector3Int(cellOffset.x, cellOffset.y, 0);
+        return SlotOwner != null ? SlotOwner.GetTerminalGridCell(this) : default;
     }
 
     public bool IsConnectedTo(CircuitNode other)
@@ -77,18 +91,7 @@ public sealed class CircuitNode : MonoBehaviour
     internal void SetNetName(string value)
         => netName = value?.Trim() ?? string.Empty;
 
-    public static bool WouldShortSupply(CircuitNode first, CircuitNode second)
-    {
-        if (first == null || second == null)
-            return false;
+    internal void SetTerminalId(string value)
+        => terminalId = value?.Trim() ?? string.Empty;
 
-        return IsSupply(first.NetName) && IsGround(second.NetName) ||
-            IsGround(first.NetName) && IsSupply(second.NetName);
-    }
-
-    private static bool IsSupply(string value)
-        => string.Equals(value, "VCC", System.StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsGround(string value)
-        => string.Equals(value, "GND", System.StringComparison.OrdinalIgnoreCase) || value == "0";
 }

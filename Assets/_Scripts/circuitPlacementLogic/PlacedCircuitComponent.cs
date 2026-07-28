@@ -11,16 +11,24 @@ public class PlacedCircuitComponent : MonoBehaviour
     [SerializeField]
     private Vector2Int footprintSize = Vector2Int.one;
 
+    [SerializeField]
+    private int rotationQuarterTurns;
+
     public int ComponentId => componentId;
     public Vector3Int GridPosition => gridPosition;
     public Vector2Int FootprintSize => footprintSize;
+    public int RotationQuarterTurns => rotationQuarterTurns;
     public CircuitElement Element { get; private set; }
 
     public void Initialize(int id, Vector3Int position, Vector2Int size)
+        => Initialize(id, position, size, 0);
+
+    public void Initialize(int id, Vector3Int position, Vector2Int size, int quarterTurns)
     {
         componentId = id;
         gridPosition = position;
         footprintSize = size;
+        rotationQuarterTurns = ((quarterTurns % 4) + 4) % 4;
         ConfigureNodes();
     }
 

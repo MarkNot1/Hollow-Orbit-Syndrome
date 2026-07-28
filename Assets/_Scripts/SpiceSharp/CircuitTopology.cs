@@ -3,39 +3,30 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-public sealed class CircuitNet
-{
-    public string SpiceName { get; }
-
-    public CircuitNet(string displayName)
-    {
-        SpiceName = string.Equals(displayName, "GND", StringComparison.OrdinalIgnoreCase) || displayName == "0"
-            ? "0"
-            : displayName;
-    }
-}
-
 public sealed class CircuitTopologyResult
 {
     public IReadOnlyList<CircuitElement> Elements { get; }
-    public IReadOnlyList<CircuitNet> Nets { get; }
     public IReadOnlyList<string> Errors { get; }
+    public CircuitElement ShortedBattery { get; }
+    public bool HasBatteryShort => ShortedBattery != null;
     public bool IsValid => Errors.Count == 0;
 
     public CircuitTopologyResult(
         IReadOnlyList<CircuitElement> elements,
-        IReadOnlyList<CircuitNet> nets,
-        IReadOnlyList<string> errors)
+        IReadOnlyList<string> errors,
+        CircuitElement shortedBattery = null)
     {
         Elements = elements;
-        Nets = nets;
         Errors = errors;
+        ShortedBattery = shortedBattery;
     }
 }
 
 public static class CircuitTopology
 {
-    public static CircuitTopologyResult Build(IEnumerable<PlacedCircuitComponent> placedComponents)
+    public static CircuitTopologyResult Build(
+        IEnumerable<PlacedCircuitComponent> placedComponents,
+        IEnumerable<CircuitNode> additionalNodes = null)
     {
         List<string> errors = new();
         List<CircuitElement> elements = placedComponents
@@ -69,6 +60,14 @@ public static class CircuitTopology
             if (!nodes.Contains(element.Terminal2))
                 nodes.Add(element.Terminal2);
         }
+        if (additionalNodes != null)
+        {
+            foreach (CircuitNode node in additionalNodes)
+            {
+                if (node != null && !nodes.Contains(node))
+                    nodes.Add(node);
+            }
+        }
 
         DisjointSet<CircuitNode> sets = new(nodes);
         foreach (CircuitNode node in nodes)
@@ -83,13 +82,16 @@ public static class CircuitTopology
             }
         }
 
-        List<CircuitNet> nets = new();
+        CircuitElement shortedBattery = null;
         foreach (List<CircuitNode> group in nodes.GroupBy(sets.Find).Select(group => group.ToList()))
         {
             bool hasGround = group.Any(node => IsGroundLabel(node.TerminalLabel));
             bool hasVcc = group.Any(node => LabelEquals(node.TerminalLabel, "VCC"));
             if (hasGround && hasVcc)
-                errors.Add("VCC and GND are connected to the same net (battery short circuit).");
+            {
+                shortedBattery = elements.FirstOrDefault(element =>
+                    element.Kind == CircuitElementKind.Battery && !element.IsBroken);
+            }
 
             string netName = hasGround
                 ? "GND"
@@ -102,7 +104,6 @@ public static class CircuitTopology
 
             foreach (CircuitNode node in group)
                 node.SetNetName(netName);
-            nets.Add(new CircuitNet(netName));
         }
 
         List<CircuitElement> batteries = elements
@@ -111,13 +112,17 @@ public static class CircuitTopology
         if (batteries.Count != 1)
             errors.Add($"Circuit requires exactly one battery; found {batteries.Count}.");
 
-        foreach (CircuitElement element in elements.Where(element => element.HasValidTerminals))
+        foreach (CircuitElement element in elements.Where(element =>
+                     element.HasValidTerminals && element.Kind == CircuitElementKind.Battery))
         {
             if (element.Terminal1.Connections.Count == 0 || element.Terminal2.Connections.Count == 0)
-                errors.Add($"{element.EntityName} has an unconnected terminal.");
+                errors.Add("The battery must have both terminals connected.");
         }
 
-        return new CircuitTopologyResult(elements, nets, errors.Distinct().ToList());
+        return new CircuitTopologyResult(
+            elements,
+            errors.Distinct().ToList(),
+            shortedBattery);
     }
 
     private static void AssignMissingTerminalLabels(IReadOnlyList<CircuitElement> elements)
@@ -144,7 +149,7 @@ public static class CircuitTopology
             if (!element.HasValidTerminals)
                 continue;
 
-            if (element.Kind == CircuitElementKind.Battery)
+            if (element.Kind == CircuitElementKind.Battery && !element.IsBroken)
             {
                 element.AssignTerminalLabels("VCC", "0");
                 continue;

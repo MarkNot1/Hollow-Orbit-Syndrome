@@ -34,6 +34,7 @@ public sealed class WireConnection : MonoBehaviour
         float width,
         Material material,
         Color color,
+        float hitboxWidthMultiplier,
         bool createColliders)
     {
         StartNode = startNode;
@@ -44,7 +45,7 @@ public sealed class WireConnection : MonoBehaviour
 
         ConfigureMesh(localPoints, width, material, color);
         if (createColliders)
-            BuildColliders(localPoints, width);
+            BuildColliders(localPoints, width, hitboxWidthMultiplier);
 
         StartNode?.Attach(this);
         EndNode?.Attach(this);
@@ -57,8 +58,52 @@ public sealed class WireConnection : MonoBehaviour
         Color color)
         => ConfigureMesh(localPoints, width, material, color);
 
+    public void SetAppearance(Material material, Color color)
+    {
+        EnsureRenderer();
+        if (material != null)
+            meshRenderer.sharedMaterial = material;
+
+        colorProperties ??= new MaterialPropertyBlock();
+        colorProperties.Clear();
+        colorProperties.SetColor(BaseColorId, color);
+        colorProperties.SetColor(ColorId, color);
+        meshRenderer.SetPropertyBlock(colorProperties);
+    }
+
     public bool Connects(CircuitNode first, CircuitNode second)
         => StartNode == first && EndNode == second || StartNode == second && EndNode == first;
+
+    public CircuitNode GetOther(CircuitNode node)
+        => StartNode == node ? EndNode : EndNode == node ? StartNode : null;
+
+    public bool ReplaceEndpoint(CircuitNode oldNode, CircuitNode newNode)
+    {
+        if (oldNode == null || newNode == null || oldNode == newNode)
+            return false;
+
+        if (StartNode == oldNode)
+        {
+            oldNode.Detach(this);
+            StartNode = newNode;
+            newNode.Attach(this);
+        }
+        else if (EndNode == oldNode)
+        {
+            oldNode.Detach(this);
+            EndNode = newNode;
+            newNode.Attach(this);
+        }
+        else
+        {
+            return false;
+        }
+
+        RebuildMesh();
+        oldNode.SlotOwner?.RefreshLabels();
+        newNode.SlotOwner?.RefreshLabels();
+        return true;
+    }
 
     public void Disconnect()
     {
@@ -97,14 +142,7 @@ public sealed class WireConnection : MonoBehaviour
     {
         EnsureRenderer();
         wireWidth = Mathf.Max(width, 0.0005f);
-        if (material != null)
-            meshRenderer.sharedMaterial = material;
-
-        colorProperties ??= new MaterialPropertyBlock();
-        colorProperties.Clear();
-        colorProperties.SetColor(BaseColorId, color);
-        colorProperties.SetColor(ColorId, color);
-        meshRenderer.SetPropertyBlock(colorProperties);
+        SetAppearance(material, color);
 
         localRenderPoints.Clear();
         if (points != null)
@@ -213,11 +251,18 @@ public sealed class WireConnection : MonoBehaviour
         triangles.Add(first + d);
     }
 
-    private void BuildColliders(IReadOnlyList<Vector3> points, float width)
+    private void BuildColliders(
+        IReadOnlyList<Vector3> points,
+        float width,
+        float hitboxWidthMultiplier)
     {
         int wireLayer = LayerMask.NameToLayer("CircuitWire");
         if (wireLayer >= 0)
             gameObject.layer = wireLayer;
+
+        float worldHitboxWidth = Mathf.Max(
+            width * Mathf.Max(1f, hitboxWidthMultiplier),
+            0.025f);
 
         for (int i = 0; i < points.Count - 1; i++)
         {
@@ -231,10 +276,11 @@ public sealed class WireConnection : MonoBehaviour
             segment.transform.localPosition = (points[i] + points[i + 1]) * 0.5f;
             segment.transform.localRotation = Quaternion.FromToRotation(Vector3.right, delta.normalized);
             BoxCollider collider = segment.AddComponent<BoxCollider>();
+            Vector3 worldScale = segment.transform.lossyScale;
             collider.size = new Vector3(
                 delta.magnitude,
-                Mathf.Max(width * 2f, 0.02f),
-                Mathf.Max(width * 2f, 0.02f));
+                worldHitboxWidth / Mathf.Max(Mathf.Abs(worldScale.y), 0.0001f),
+                worldHitboxWidth / Mathf.Max(Mathf.Abs(worldScale.z), 0.0001f));
             segmentColliders.Add(collider);
         }
     }

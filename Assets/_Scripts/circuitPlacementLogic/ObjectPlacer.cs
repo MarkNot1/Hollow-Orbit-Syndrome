@@ -25,6 +25,7 @@ public class ObjectPlacer : MonoBehaviour
     private componentData selectedComponent;
     private Vector2Int selectedFootprint;
     private int placementStartedFrame = -1;
+    private int rotationQuarterTurns;
     private Vector3Int? lastDetectedPosition;
     private PlacedCircuitComponent hoveredRemovalComponent;
 
@@ -33,6 +34,79 @@ public class ObjectPlacer : MonoBehaviour
 
     public event Action<PlacedCircuitComponent> ComponentPlaced;
     public event Action<PlacedCircuitComponent> ComponentRemoved;
+
+    public bool CanRestoreComponent(int componentId, Vector2Int footprint, int quarterTurns)
+    {
+        if (!TryGetComponentData(componentId, out componentData data) || data.Prefab == null)
+            return false;
+        Vector2Int expected = GetRequiredFootprint(data);
+        if ((quarterTurns & 1) != 0)
+            expected = RotateFootprintClockwise(expected);
+        return expected == footprint;
+    }
+
+    public PlacedCircuitComponent[] GetActiveComponents()
+        => activeBoard?.Circuit == null
+            ? Array.Empty<PlacedCircuitComponent>()
+            : activeBoard.Circuit.GetComponentsInChildren<PlacedCircuitComponent>(true);
+
+    public bool TryPlaceSnapshotComponent(
+        int componentId,
+        Vector3Int gridPosition,
+        Vector2Int footprint,
+        int quarterTurns,
+        double electricalValue,
+        CircuitComponentState state,
+        string failureReason,
+        out PlacedCircuitComponent placed)
+    {
+        placed = null;
+        if (!HasActiveBoard || !TryGetComponentData(componentId, out componentData data) ||
+            !CanRestoreComponent(componentId, footprint, quarterTurns) ||
+            !activeGrid.CanPlace(gridPosition, footprint))
+            return false;
+
+        int normalizedTurns = ((quarterTurns % 4) + 4) % 4;
+        Quaternion rotation = Quaternion.AngleAxis(
+            normalizedTurns * 90f,
+            activeBoard.GridNormal) * GetBoardRotation();
+        Vector3 center = GetFootprintCenter(gridPosition, footprint);
+        GameObject instance = Instantiate(data.Prefab, center, rotation, EnsureCircuitPlacementRoot());
+        if (!ScaleToFootprint(instance, footprint))
+        {
+            Destroy(instance);
+            return false;
+        }
+        AlignToFootprint(instance, center);
+
+        placed = instance.GetComponent<PlacedCircuitComponent>();
+        if (placed == null)
+            placed = instance.AddComponent<PlacedCircuitComponent>();
+        placed.Initialize(componentId, gridPosition, footprint, normalizedTurns);
+        if (!activeGrid.TryRegister(placed))
+        {
+            Destroy(instance);
+            placed = null;
+            return false;
+        }
+
+        placed.Element?.TrySetValue(electricalValue);
+        placed.Element?.RestoreState(state, failureReason);
+        ComponentPlaced?.Invoke(placed);
+        return true;
+    }
+
+    public void ClearActiveComponentsForSnapshot()
+    {
+        foreach (PlacedCircuitComponent component in GetActiveComponents())
+        {
+            if (component == null)
+                continue;
+            activeGrid?.TryRemove(component.GridPosition, out _);
+            ComponentRemoved?.Invoke(component);
+            Destroy(component.gameObject);
+        }
+    }
 
     public void SetWireSystem(CircuitWireSystem system)
         => wireSystem = system;
@@ -89,6 +163,7 @@ public class ObjectPlacer : MonoBehaviour
         }
 
         selectedFootprint = GetRequiredFootprint(selectedComponent);
+        rotationQuarterTurns = 0;
 
         if (selectedComponent.Prefab == null || selectedFootprint.x <= 0 || selectedFootprint.y <= 0)
         {
@@ -105,7 +180,7 @@ public class ObjectPlacer : MonoBehaviour
             return false;
         }
 
-        previewInstance.transform.rotation = GetBoardRotation();
+        previewInstance.transform.rotation = GetPlacementRotation();
         if (!ScaleToFootprint(previewInstance, selectedFootprint))
         {
             Debug.LogWarning($"Could not fit the preview for component ID {componentId} to the board.", this);
@@ -162,7 +237,7 @@ public class ObjectPlacer : MonoBehaviour
         GameObject instance = Instantiate(
             selectedComponent.Prefab,
             footprintCenter,
-            GetBoardRotation(),
+            GetPlacementRotation(),
             EnsureCircuitPlacementRoot());
 
         if (!ScaleToFootprint(instance, selectedFootprint))
@@ -178,7 +253,7 @@ public class ObjectPlacer : MonoBehaviour
         if (metadata == null)
             metadata = instance.AddComponent<PlacedCircuitComponent>();
 
-        metadata.Initialize(selectedComponent.ID, gridPosition, selectedFootprint);
+        metadata.Initialize(selectedComponent.ID, gridPosition, selectedFootprint, rotationQuarterTurns);
         if (!activeGrid.TryRegister(metadata))
         {
             Debug.LogWarning("The component footprint became occupied before it could be registered.", this);
@@ -187,8 +262,31 @@ public class ObjectPlacer : MonoBehaviour
         }
 
         ComponentPlaced?.Invoke(metadata);
+        wireSystem?.TryClaimOpenSlot(metadata);
 
         return true;
+    }
+
+    public void RotateSelectedComponent(placementInputManager inputManager)
+    {
+        if (selectedComponent == null || !HasActiveBoard ||
+            preview == null || preview.PreviewObject == null)
+            return;
+
+        rotationQuarterTurns = (rotationQuarterTurns + 1) % 4;
+        selectedFootprint = RotateFootprintClockwise(selectedFootprint);
+
+        GameObject previewInstance = preview.PreviewObject;
+        previewInstance.transform.rotation = GetPlacementRotation();
+        if (!ScaleToFootprint(previewInstance, selectedFootprint))
+        {
+            Debug.LogWarning(
+                $"Could not refit the rotated preview for component ID {selectedComponent.ID}.",
+                this);
+        }
+
+        lastDetectedPosition = null;
+        UpdatePlacementPreview(inputManager);
     }
 
     public void EndPlacement()
@@ -196,6 +294,7 @@ public class ObjectPlacer : MonoBehaviour
         selectedComponent = null;
         selectedFootprint = Vector2Int.zero;
         placementStartedFrame = -1;
+        rotationQuarterTurns = 0;
         lastDetectedPosition = null;
 
         if (preview != null)
@@ -253,7 +352,7 @@ public class ObjectPlacer : MonoBehaviour
         }
 
         GameObject previewInstance = preview.StartShowingRemovalPreview(data.Prefab);
-        previewInstance.transform.rotation = GetBoardRotation();
+        previewInstance.transform.rotation = component.transform.rotation;
         if (!ScaleToFootprint(previewInstance, component.FootprintSize))
         {
             preview.StopShowingPreview();
@@ -281,7 +380,7 @@ public class ObjectPlacer : MonoBehaviour
         ClearRemovalPreview();
         if (component != null)
         {
-            wireSystem?.RemoveConnections(component);
+            wireSystem?.PreserveConnections(component);
             ComponentRemoved?.Invoke(component);
             Destroy(component.gameObject);
         }
@@ -384,7 +483,9 @@ public class ObjectPlacer : MonoBehaviour
 
     private bool CanPlace(Vector3Int gridPosition, Vector2Int footprintSize)
         => activeGrid.CanPlace(gridPosition, footprintSize) &&
-            (wireSystem == null || wireSystem.IsFootprintClear(gridPosition, footprintSize));
+            (wireSystem == null ||
+                wireSystem.IsFootprintClear(gridPosition, footprintSize) &&
+                !wireSystem.HasBlockingOpenSlot(gridPosition, footprintSize, out _));
 
     private bool ScaleToFootprint(GameObject instance, Vector2Int footprintSize)
     {
@@ -422,7 +523,9 @@ public class ObjectPlacer : MonoBehaviour
 
     private bool TryGetProjectedBounds(GameObject instance, out Vector3 min, out Vector3 max)
     {
-        Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
+        Renderer[] renderers = Array.FindAll(
+            instance.GetComponentsInChildren<Renderer>(),
+            renderer => renderer is not ParticleSystemRenderer);
         if (renderers.Length > 0)
             return TryProjectBounds(renderers, renderer => renderer.bounds, out min, out max);
 
@@ -467,6 +570,14 @@ public class ObjectPlacer : MonoBehaviour
 
     private Quaternion GetBoardRotation()
         => Quaternion.LookRotation(activeBoard.GridForward, activeBoard.GridNormal);
+
+    private Quaternion GetPlacementRotation()
+        => Quaternion.AngleAxis(
+            rotationQuarterTurns * 90f,
+            activeBoard.GridNormal) * GetBoardRotation();
+
+    private static Vector2Int RotateFootprintClockwise(Vector2Int footprint)
+        => new(footprint.y, footprint.x);
 
     private void ClearRemovalPreview()
     {

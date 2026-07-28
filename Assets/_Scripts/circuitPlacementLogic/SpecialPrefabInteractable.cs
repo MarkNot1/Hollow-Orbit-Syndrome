@@ -43,22 +43,47 @@ public class SpecialPrefabInteractable : MonoBehaviour, IInspectableInteractable
 
     public Bounds GetWorldBounds()
     {
-        Renderer[] renderers = GetComponentsInChildren<Renderer>();
-        if (renderers.Length > 0)
+        Transform tileGrid = transform.Find("TileGrid");
+        if (tileGrid != null)
         {
-            Bounds bounds = renderers[0].bounds;
-            for (int i = 1; i < renderers.Length; i++)
-                bounds.Encapsulate(renderers[i].bounds);
-            return bounds;
+            Renderer tileRenderer = tileGrid.GetComponent<Renderer>();
+            if (tileRenderer != null)
+                return tileRenderer.bounds;
+
+            Collider tileCollider = tileGrid.GetComponent<Collider>();
+            if (tileCollider != null)
+                return tileCollider.bounds;
         }
+
+        Renderer[] renderers = GetComponentsInChildren<Renderer>();
+        bool hasBounds = false;
+        Bounds bounds = default;
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] is ParticleSystemRenderer)
+                continue;
+
+            if (!hasBounds)
+            {
+                bounds = renderers[i].bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(renderers[i].bounds);
+            }
+        }
+
+        if (hasBounds)
+            return bounds;
 
         Collider[] colliders = GetComponentsInChildren<Collider>();
         if (colliders.Length > 0)
         {
-            Bounds bounds = colliders[0].bounds;
+            Bounds colliderBounds = colliders[0].bounds;
             for (int i = 1; i < colliders.Length; i++)
-                bounds.Encapsulate(colliders[i].bounds);
-            return bounds;
+                colliderBounds.Encapsulate(colliders[i].bounds);
+            return colliderBounds;
         }
 
         return new Bounds(transform.position, Vector3.one * VoxelMetrics.Size);

@@ -12,9 +12,6 @@ public class MeshData
     public List<int> colliderTriangles = new List<int>();
 
     public MeshData waterMesh;
-    private bool isMainMesh = true;
-
-
     public MeshData(bool isMainMesh)
     {
         if (isMainMesh)

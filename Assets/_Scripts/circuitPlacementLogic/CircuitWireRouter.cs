@@ -21,6 +21,7 @@ public static class CircuitWireRouter
         Vector2Int goal,
         Func<Vector2Int, bool> isBlocked,
         Func<Vector2Int, Vector2Int, bool> isMoveBlocked,
+        Func<Vector2Int, int> getAdditionalCost,
         out List<Vector2Int> path)
     {
         path = null;
@@ -89,6 +90,8 @@ public static class CircuitWireRouter
                 int moveCost = direction.x != 0 && direction.y != 0 ? DiagonalCost : StraightCost;
                 if (arrivalDirections[currentIndex] >= 0 && arrivalDirections[currentIndex] != directionIndex)
                     moveCost += TurnCost;
+                if (getAdditionalCost != null)
+                    moveCost += Mathf.Max(0, getAdditionalCost(next));
 
                 int newCost = costs[currentIndex] + moveCost;
                 if (newCost >= costs[nextIndex])

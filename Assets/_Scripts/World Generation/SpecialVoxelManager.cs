@@ -318,10 +318,7 @@ public class SpecialVoxelManager : MonoBehaviour
     {
         SpecialPrefabInteractable interactable = instance.GetComponent<SpecialPrefabInteractable>();
         if (interactable == null)
-        {
-            CircuitInteractable circuit = instance.GetComponent<CircuitInteractable>();
-            interactable = circuit != null ? circuit : instance.AddComponent<SpecialPrefabInteractable>();
-        }
+            interactable = instance.AddComponent<SpecialPrefabInteractable>();
 
         interactable.Configure(
             placement.ItemId,

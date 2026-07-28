@@ -31,6 +31,9 @@ public sealed class PlacementState : IPlacementState
             onPlacementCompleted?.Invoke();
     }
 
+    public void HandleRotateAction()
+        => objectPlacer.RotateSelectedComponent(inputManager);
+
     public void Exit()
         => objectPlacer.EndPlacement();
 }

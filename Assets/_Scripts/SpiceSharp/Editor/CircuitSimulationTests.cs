@@ -111,21 +111,86 @@ public sealed class CircuitSimulationTests
     }
 
     [Test]
-    public void RejectsSupplyShortBeforeAndAfterConnection()
+    public void DetectsSupplyShortBeforeSimulation()
     {
         PlacedCircuitComponent battery = CreateComponent(4, new Vector3Int(0, 0));
         CircuitTopology.Build(new[] { battery });
 
         Assert.That(battery.Element.Terminal2.TerminalLabel, Is.EqualTo("0"));
 
-        Assert.That(
-            CircuitNode.WouldShortSupply(battery.Element.Terminal1, battery.Element.Terminal2),
-            Is.True);
-
         Connect(battery.Element.Terminal1, battery.Element.Terminal2);
         CircuitTopologyResult topology = CircuitTopology.Build(new[] { battery });
-        Assert.That(topology.IsValid, Is.False);
-        Assert.That(topology.Errors, Has.Some.Contains("short circuit"));
+        Assert.That(topology.IsValid, Is.True);
+        Assert.That(topology.HasBatteryShort, Is.True);
+        Assert.That(topology.ShortedBattery, Is.SameAs(battery.Element));
+    }
+
+    [Test]
+    public void BatteryShortIsStructuredAndBatteryNeverBreaks()
+    {
+        PlacedCircuitComponent battery = CreateComponent(4, new Vector3Int(0, 0));
+        CircuitTopology.Build(new[] { battery });
+        WireConnection shortWire = Connect(battery.Element.Terminal1, battery.Element.Terminal2);
+
+        CircuitTopologyResult shorted = CircuitTopology.Build(new[] { battery });
+
+        Assert.That(shorted.HasBatteryShort, Is.True);
+        Assert.That(shorted.ShortedBattery, Is.SameAs(battery.Element));
+        Assert.That(battery.Element.Break("test"), Is.False);
+        Assert.That(battery.Element.IsBroken, Is.False);
+        Assert.That(battery.Element.SetBatteryShorted(true, false), Is.True);
+        Assert.That(battery.Element.State, Is.EqualTo(CircuitComponentState.BatteryShorted));
+
+        shortWire.Disconnect();
+        CircuitTopologyResult recovered = CircuitTopology.Build(new[] { battery });
+        battery.Element.SetBatteryShorted(recovered.HasBatteryShort, false);
+
+        Assert.That(recovered.HasBatteryShort, Is.False);
+        Assert.That(battery.Element.State, Is.EqualTo(CircuitComponentState.Healthy));
+    }
+
+    [Test]
+    public void BrokenComponentSimulatesAsAirGapResistance()
+    {
+        PlacedCircuitComponent battery = CreateComponent(4, new Vector3Int(0, 0));
+        PlacedCircuitComponent resistor = CreateComponent(0, new Vector3Int(1, 0));
+        CircuitTopology.Build(new[] { battery, resistor });
+        Connect(battery.Element.Terminal1, resistor.Element.Terminal1);
+        Connect(battery.Element.Terminal2, resistor.Element.Terminal2);
+        Assert.That(resistor.Element.Break("Overload", false), Is.True);
+
+        CircuitSimulationResult result = CircuitSimulationService.Simulate(
+            CircuitTopology.Build(new[] { battery, resistor }));
+
+        Assert.That(result.Success, Is.True, result.Message);
+        Assert.That(
+            Math.Abs(result.Elements[resistor.Element].Current),
+            Is.EqualTo(5d / CircuitElement.BrokenResistance).Within(1e-15));
+        Assert.That(resistor.Element.Value, Is.EqualTo(1000d));
+        Assert.That(resistor.Element.EffectiveResistance, Is.EqualTo(CircuitElement.BrokenResistance));
+    }
+
+    [Test]
+    public void OpenSlotKeepsWireAndUsesUniqueTerminalLabels()
+    {
+        PlacedCircuitComponent resistor = CreateComponent(0, new Vector3Int(0, 0));
+        PlacedCircuitComponent capacitor = CreateComponent(1, new Vector3Int(2, 0));
+        CircuitTopology.Build(new[] { resistor, capacitor });
+        WireConnection wire = Connect(resistor.Element.Terminal1, capacitor.Element.Terminal1);
+
+        GameObject slotObject = new("Open Slot");
+        createdObjects.Add(slotObject);
+        CircuitNode first = CreateStandaloneNode(slotObject.transform, "A");
+        CircuitNode second = CreateStandaloneNode(slotObject.transform, "B");
+        OpenCircuitSlot slot = slotObject.AddComponent<OpenCircuitSlot>();
+        slot.Initialize("slot-one", Vector3Int.zero, Vector2Int.one, 0, first, second);
+        Assert.That(wire.ReplaceEndpoint(resistor.Element.Terminal1, first), Is.True);
+        slot.RefreshLabels();
+
+        Assert.That(wire.StartNode, Is.SameAs(first));
+        Assert.That(first.Connections, Contains.Item(wire));
+        Assert.That(first.TerminalLabel, Does.StartWith("OPEN_"));
+        Assert.That(first.TerminalLabel, Is.Not.EqualTo(second.TerminalLabel));
     }
 
     private PlacedCircuitComponent CreateComponent(int id, Vector3Int position)
@@ -147,6 +212,13 @@ public sealed class CircuitSimulationTests
         node.AddComponent<CircuitNode>();
     }
 
+    private static CircuitNode CreateStandaloneNode(Transform parent, string nodeName)
+    {
+        GameObject node = new(nodeName);
+        node.transform.SetParent(parent, false);
+        return node.AddComponent<CircuitNode>();
+    }
+
     private WireConnection Connect(CircuitNode first, CircuitNode second)
     {
         GameObject wireObject = new("Wire", typeof(MeshFilter), typeof(MeshRenderer), typeof(WireConnection));
@@ -160,6 +232,7 @@ public sealed class CircuitSimulationTests
             0.025f,
             null,
             Color.orange,
+            4f,
             false);
         return wire;
     }

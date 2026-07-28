@@ -286,6 +286,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::placementInputManager
   sceneCamera: {fileID: 330585545}
+  inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
 --- !u!4 &10284590
 Transform:
   m_ObjectHideFlags: 0
@@ -3521,6 +3522,7 @@ GameObject:
   - component: {fileID: 1927176804}
   - component: {fileID: 1927176805}
   - component: {fileID: 1927176806}
+  - component: {fileID: 1927176807}
   m_Layer: 0
   m_Name: PlacementSystem
   m_TagString: Untagged
@@ -3573,15 +3575,32 @@ MonoBehaviour:
   wirePrefab: {fileID: 9069578609356802705, guid: 7a5d03cabe227f94a9e31ce65208fe7b, type: 3}
   wireMaterial: {fileID: 2100000, guid: e3f020948af76c140937b28c89c47567, type: 2}
   wireWidth: 0.0035714286
+  wireHitboxWidthMultiplier: 4
   wireSurfaceOffset: 0.004
-  wireColor: {r: 0.95, g: 0.55, b: 0.08, a: 1}
+  wireColor: {r: 0.4716981, g: 0.24304007, b: 0.03337486, a: 1}
   invalidColor: {r: 1, g: 0, b: 0, a: 1}
+  removalHoverColor: {r: 1, g: 0, b: 0, a: 0.2}
   nodeLayerMask:
     serializedVersion: 2
     m_Bits: 256
   wireLayerMask:
     serializedVersion: 2
     m_Bits: 512
+--- !u!114 &1927176807
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1927176803}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74268ae5a9a94dda80ffa6b41a57f79a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CircuitPuzzleSystem
+  placementSystem: {fileID: 1927176805}
+  objectPlacer: {fileID: 1222435885}
+  wireSystem: {fileID: 1927176806}
 --- !u!1 &2137643156
 GameObject:
   m_ObjectHideFlags: 0

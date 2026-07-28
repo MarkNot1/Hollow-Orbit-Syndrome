@@ -15,10 +15,16 @@ public sealed class RemovingState : IPlacementState
     }
 
     public bool Enter()
-        => objectPlacer != null && objectPlacer.BeginRemoval();
+    {
+        wireSystem?.EndRemovalPreview();
+        return objectPlacer != null && objectPlacer.BeginRemoval();
+    }
 
     public void UpdateState()
-        => objectPlacer.UpdateRemovalPreview(inputManager);
+    {
+        objectPlacer.UpdateRemovalPreview(inputManager);
+        wireSystem?.UpdateRemovalPreview(inputManager);
+    }
 
     public void HandlePrimaryAction()
     {
@@ -27,5 +33,8 @@ public sealed class RemovingState : IPlacementState
     }
 
     public void Exit()
-        => objectPlacer.EndRemoval();
+    {
+        objectPlacer.EndRemoval();
+        wireSystem?.EndRemovalPreview();
+    }
 }

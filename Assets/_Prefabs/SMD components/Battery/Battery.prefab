@@ -1,5 +1,84 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1001 &1272086524799512781
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 1340444921179280159}
+    m_Modifications:
+    - target: {fileID: 2871603711314367002, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: looping
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2871603711314367002, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: EmissionModule.m_BurstCount
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2871603711314367002, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: EmissionModule.m_Bursts.Array.size
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7503737749266396755, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_Name
+      value: Damage Sparks
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+--- !u!198 &3926760266027131607 stripped
+ParticleSystem:
+  m_CorrespondingSourceObject: {fileID: 2871603711314367002, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+  m_PrefabInstance: {fileID: 1272086524799512781}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &4487855984516518144 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+  m_PrefabInstance: {fileID: 1272086524799512781}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1517870238977455348
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -61,10 +140,16 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: cb2fadf3805d63745861141f546d6f5f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 9127455633552920585}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: cb2fadf3805d63745861141f546d6f5f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4487855984516518144}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: cb2fadf3805d63745861141f546d6f5f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 7864250653061066438}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: cb2fadf3805d63745861141f546d6f5f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3000692203419008615}
     - targetCorrespondingSourceObject: {fileID: 8164078558771037576, guid: cb2fadf3805d63745861141f546d6f5f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 208333115964195729}
@@ -98,6 +183,31 @@ MonoBehaviour:
   terminal1: {fileID: 5853897201692622025}
   terminal2: {fileID: 3888632010356763019}
   defaultsInitialized: 1
+  ledTurnOnCurrent: 0.0001
+  maximumVoltage: 0
+  maximumCurrent: 0
+  maximumPower: 0
+  maximumReverseVoltage: 0
+  failureDelay: 0.35
+  failureDefaultsInitialized: 1
+  state: 0
+  failureReason: 
+--- !u!114 &3000692203419008615
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1860522251568171429}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9eb0cb29cb948399626be998d7a9d35, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrokenComponentVisual
+  brokenMaterialTemplate: {fileID: 0}
+  sparks: {fileID: 3926760266027131607}
+  failureBurstCount: 14
+  batteryShortBurstCount: 18
 --- !u!1 &7231704309435281788 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 8164078558771037576, guid: cb2fadf3805d63745861141f546d6f5f, type: 3}

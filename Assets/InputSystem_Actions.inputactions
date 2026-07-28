@@ -548,6 +548,34 @@
             ]
         },
         {
+            "name": "CircuitPlacement",
+            "id": "8b65cd19-4ea2-43dd-8e77-f30ce94d281b",
+            "actions": [
+                {
+                    "name": "RotateComponent",
+                    "type": "Button",
+                    "id": "af62047e-8ff4-46b2-878e-9a5a3e9e6a4b",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "f8c35f39-1355-4b42-a64d-f9c8ac42e2bf",
+                    "path": "<Keyboard>/r",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "RotateComponent",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        },
+        {
             "name": "UI",
             "id": "272f6d14-89ba-496f-b7ff-215263d3219f",
             "actions": [

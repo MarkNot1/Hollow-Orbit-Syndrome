@@ -40,20 +40,23 @@ public class InteractionInspectionController : MonoBehaviour
     private float exitRayDistance = 12f;
     [SerializeField]
     private float cameraSlideDuration = 0.28f;
-    [SerializeField]
-    private float inspectionZoomSpeed = 0.006f;
+    [SerializeField, Min(0f)]
+    private float inspectionZoomSpeed = 0.02f;
+    [SerializeField, Min(0f)]
+    private float inspectionMaxZoomStep = 0.75f;
     [SerializeField]
     private float inspectionNearClipPlane = 0.01f;
     [SerializeField]
     private float inspectionMinZoomDistance = 0.08f;
+    [SerializeField, Min(1f)]
+    private float inspectionMaxZoomMultiplier = 6f;
     [SerializeField]
-    private float inspectionMinZoomMultiplier = 0.45f;
+    private float inspectionTiltSpeed = 0.2f;
     [SerializeField]
-    private float inspectionMaxZoomMultiplier = 2f;
-    [SerializeField]
-    private float inspectionTiltSpeed = 0.15f;
-    [SerializeField]
-    private float inspectionMaxTiltAngle = 35f;
+    [Range(10f, 89f)]
+    private float inspectionMaxTiltAngle = 89f;
+    [SerializeField, Min(0f)]
+    private float inspectionOrbitSmoothTime = 0.035f;
 
     private readonly RaycastHit[] raycastHits = new RaycastHit[32];
     private IPlayerInteractable targetedInteractable;
@@ -63,10 +66,20 @@ public class InteractionInspectionController : MonoBehaviour
     private bool isInspecting;
     private Coroutine cameraSlideCoroutine;
     private Vector3 inspectionFocusPoint;
-    private Vector3 inspectionBaseViewDirection;
-    private Vector3 inspectionViewDirection;
+    private Vector3 inspectionBoundsExtents;
     private float inspectionBaseDistance;
     private float inspectionCurrentDistance;
+    private float inspectionTargetDistance;
+    private float inspectionCurrentYaw;
+    private float inspectionTargetYaw;
+    private float inspectionCurrentPitch;
+    private float inspectionTargetPitch;
+    private float inspectionYawVelocity;
+    private float inspectionPitchVelocity;
+    private float inspectionDistanceVelocity;
+    private bool isOrbitDragging;
+    private CursorLockMode cursorLockBeforeOrbit;
+    private bool cursorVisibleBeforeOrbit;
     private float previousCameraNearClipPlane;
     private float previousVirtualCameraNearClipPlane;
     private bool hasStoredCameraNearClipPlane;
@@ -241,6 +254,7 @@ public class InteractionInspectionController : MonoBehaviour
     private void ExitInspection(bool movePlayerNearInteractable)
     {
         IInspectableInteractable interactable = inspectedInteractable;
+        EndOrbitDrag();
 
         if (virtualCamera != null && previousCameraFollow != null)
             virtualCamera.Follow = previousCameraFollow;
@@ -248,7 +262,8 @@ public class InteractionInspectionController : MonoBehaviour
         StopCameraSlide();
         RestoreInspectionClipPlane();
 
-        if (movePlayerNearInteractable && interactable != null)
+        if (movePlayerNearInteractable && interactable != null &&
+            ShouldMovePlayerAfterInspection(interactable))
             TryMovePlayerNearInteractable(interactable);
 
         inspectedInteractable = null;
@@ -305,6 +320,9 @@ public class InteractionInspectionController : MonoBehaviour
     {
     }
 
+    protected virtual bool ShouldMovePlayerAfterInspection(IInspectableInteractable interactable)
+        => true;
+
     private Pose GetInspectionCameraPose(IInspectableInteractable interactable)
     {
         Bounds bounds = interactable.GetWorldBounds();
@@ -318,10 +336,11 @@ public class InteractionInspectionController : MonoBehaviour
         distance = Mathf.Max(distance, minCameraDistance);
 
         inspectionFocusPoint = bounds.center;
-        inspectionBaseViewDirection = viewDirection.normalized;
-        inspectionViewDirection = inspectionBaseViewDirection;
+        inspectionBoundsExtents = bounds.extents;
         inspectionBaseDistance = distance;
         inspectionCurrentDistance = distance;
+        inspectionTargetDistance = distance;
+        SetOrbitAngles(viewDirection.normalized);
 
         Vector3 cameraPosition = GetInspectionCameraPosition();
         Quaternion cameraRotation = GetInspectionCameraRotation(cameraPosition);
@@ -330,33 +349,53 @@ public class InteractionInspectionController : MonoBehaviour
 
     private void HandleInspectionCameraControls()
     {
-        if (inspectionAnchor == null || Mouse.current == null || cameraSlideCoroutine != null)
+        if (inspectionAnchor == null || cameraSlideCoroutine != null)
             return;
 
-        bool changed = false;
-        Vector2 scroll = Mouse.current.scroll.ReadValue();
-        if (Mathf.Abs(scroll.y) > 0.01f)
+        Mouse mouse = Mouse.current;
+        if (mouse != null)
         {
-            float minDistance = Mathf.Max(inspectionMinZoomDistance, inspectionBaseDistance * inspectionMinZoomMultiplier);
-            float maxDistance = Mathf.Max(minDistance + 0.01f, inspectionBaseDistance * inspectionMaxZoomMultiplier);
-            inspectionCurrentDistance = Mathf.Clamp(
-                inspectionCurrentDistance - scroll.y * inspectionZoomSpeed,
-                minDistance,
-                maxDistance);
-            changed = true;
-        }
-
-        if (Mouse.current.middleButton.isPressed)
-        {
-            Vector2 delta = Mouse.current.delta.ReadValue();
-            if (delta.sqrMagnitude > 0.01f)
+            Vector2 scroll = mouse.scroll.ReadValue();
+            if (Mathf.Abs(scroll.y) > 0.01f)
             {
-                changed |= TryTiltInspectionView(delta);
+                float zoomExponent = Mathf.Clamp(
+                    -scroll.y * inspectionZoomSpeed,
+                    -inspectionMaxZoomStep,
+                    inspectionMaxZoomStep);
+                float zoomFactor = Mathf.Exp(zoomExponent);
+                inspectionTargetDistance *= zoomFactor;
+            }
+
+            if (mouse.middleButton.isPressed)
+            {
+                BeginOrbitDrag();
+                Vector2 delta = mouse.delta.ReadValue();
+                inspectionTargetYaw += delta.x * inspectionTiltSpeed;
+                inspectionTargetPitch = Mathf.Clamp(
+                    inspectionTargetPitch + delta.y * inspectionTiltSpeed,
+                    -Mathf.Abs(inspectionMaxTiltAngle),
+                    Mathf.Abs(inspectionMaxTiltAngle));
+            }
+            else
+            {
+                EndOrbitDrag();
             }
         }
+        else
+        {
+            EndOrbitDrag();
+        }
 
-        if (!changed)
-            return;
+        Vector3 targetDirection = GetOrbitDirection(
+            inspectionTargetYaw,
+            inspectionTargetPitch);
+        float minimumDistance = GetMinimumOrbitDistance(targetDirection);
+        inspectionTargetDistance = Mathf.Clamp(
+            inspectionTargetDistance,
+            minimumDistance,
+            GetMaximumOrbitDistance(minimumDistance));
+
+        SmoothOrbitState();
 
         Vector3 cameraPosition = GetInspectionCameraPosition();
         inspectionAnchor.SetPositionAndRotation(cameraPosition, GetInspectionCameraRotation(cameraPosition));
@@ -364,7 +403,9 @@ public class InteractionInspectionController : MonoBehaviour
 
     private Vector3 GetInspectionCameraPosition()
     {
-        return inspectionFocusPoint + inspectionViewDirection * inspectionCurrentDistance;
+        return inspectionFocusPoint + GetOrbitDirection(
+            inspectionCurrentYaw,
+            inspectionCurrentPitch) * inspectionCurrentDistance;
     }
 
     private Quaternion GetInspectionCameraRotation(Vector3 cameraPosition)
@@ -372,31 +413,127 @@ public class InteractionInspectionController : MonoBehaviour
         return Quaternion.LookRotation(inspectionFocusPoint - cameraPosition, Vector3.up);
     }
 
-    private bool TryTiltInspectionView(Vector2 delta)
+    private void SetOrbitAngles(Vector3 viewDirection)
     {
-        Vector3 candidateDirection = inspectionViewDirection;
+        inspectionCurrentYaw = Mathf.Atan2(viewDirection.x, viewDirection.z) * Mathf.Rad2Deg;
+        inspectionTargetYaw = inspectionCurrentYaw;
+        inspectionCurrentPitch = Mathf.Asin(Mathf.Clamp(viewDirection.y, -1f, 1f)) * Mathf.Rad2Deg;
+        inspectionCurrentPitch = Mathf.Clamp(
+            inspectionCurrentPitch,
+            -Mathf.Abs(inspectionMaxTiltAngle),
+            Mathf.Abs(inspectionMaxTiltAngle));
+        inspectionTargetPitch = inspectionCurrentPitch;
+        inspectionYawVelocity = 0f;
+        inspectionPitchVelocity = 0f;
+        inspectionDistanceVelocity = 0f;
+    }
 
-        if (Mathf.Abs(delta.x) > 0.01f)
-            candidateDirection = Quaternion.AngleAxis(delta.x * inspectionTiltSpeed, Vector3.up) * candidateDirection;
-
-        if (Mathf.Abs(delta.y) > 0.01f)
+    private void SmoothOrbitState()
+    {
+        float smoothTime = Mathf.Max(0f, inspectionOrbitSmoothTime);
+        if (smoothTime <= 0f)
         {
-            Vector3 tiltRight = Vector3.Cross(Vector3.up, candidateDirection);
-            if (tiltRight.sqrMagnitude < 0.001f)
-                tiltRight = inspectionAnchor.right;
-
-            candidateDirection = Quaternion.AngleAxis(-delta.y * inspectionTiltSpeed, tiltRight.normalized) * candidateDirection;
+            inspectionCurrentYaw = inspectionTargetYaw;
+            inspectionCurrentPitch = inspectionTargetPitch;
+            inspectionCurrentDistance = inspectionTargetDistance;
+            return;
         }
 
-        candidateDirection.Normalize();
-        if (candidateDirection.sqrMagnitude < 0.001f)
-            return false;
+        float deltaTime = Mathf.Max(0.0001f, Time.unscaledDeltaTime);
+        inspectionCurrentYaw = Mathf.SmoothDampAngle(
+            inspectionCurrentYaw,
+            inspectionTargetYaw,
+            ref inspectionYawVelocity,
+            smoothTime,
+            Mathf.Infinity,
+            deltaTime);
+        inspectionCurrentPitch = Mathf.SmoothDampAngle(
+            inspectionCurrentPitch,
+            inspectionTargetPitch,
+            ref inspectionPitchVelocity,
+            smoothTime,
+            Mathf.Infinity,
+            deltaTime);
+        inspectionCurrentDistance = Mathf.SmoothDamp(
+            inspectionCurrentDistance,
+            inspectionTargetDistance,
+            ref inspectionDistanceVelocity,
+            smoothTime,
+            Mathf.Infinity,
+            deltaTime);
+    }
 
-        if (Vector3.Angle(inspectionBaseViewDirection, candidateDirection) > inspectionMaxTiltAngle)
-            return false;
+    private float GetMinimumOrbitDistance(Vector3 direction)
+    {
+        float distanceToBounds = float.PositiveInfinity;
+        distanceToBounds = GetAxisExitDistance(
+            inspectionBoundsExtents.x,
+            direction.x,
+            distanceToBounds);
+        distanceToBounds = GetAxisExitDistance(
+            inspectionBoundsExtents.y,
+            direction.y,
+            distanceToBounds);
+        distanceToBounds = GetAxisExitDistance(
+            inspectionBoundsExtents.z,
+            direction.z,
+            distanceToBounds);
 
-        inspectionViewDirection = candidateDirection;
-        return true;
+        if (!float.IsFinite(distanceToBounds))
+            distanceToBounds = 0f;
+
+        float surfacePadding = Mathf.Max(inspectionNearClipPlane * 2f, 0.01f);
+        return Mathf.Max(inspectionMinZoomDistance, distanceToBounds + surfacePadding);
+    }
+
+    private float GetMaximumOrbitDistance(float minimumDistance)
+    {
+        float multiplier = Mathf.Max(inspectionMaxZoomMultiplier, 1f);
+        return Mathf.Max(minimumDistance + 0.01f, inspectionBaseDistance * multiplier);
+    }
+
+    private static Vector3 GetOrbitDirection(float yaw, float pitch)
+    {
+        float yawRadians = yaw * Mathf.Deg2Rad;
+        float pitchRadians = pitch * Mathf.Deg2Rad;
+        float horizontal = Mathf.Cos(pitchRadians);
+        return new Vector3(
+            horizontal * Mathf.Sin(yawRadians),
+            Mathf.Sin(pitchRadians),
+            horizontal * Mathf.Cos(yawRadians));
+    }
+
+    private static float GetAxisExitDistance(
+        float extent,
+        float direction,
+        float currentDistance)
+    {
+        float magnitude = Mathf.Abs(direction);
+        return magnitude > 0.0001f
+            ? Mathf.Min(currentDistance, Mathf.Max(0f, extent) / magnitude)
+            : currentDistance;
+    }
+
+    private void BeginOrbitDrag()
+    {
+        if (isOrbitDragging)
+            return;
+
+        isOrbitDragging = true;
+        cursorLockBeforeOrbit = Cursor.lockState;
+        cursorVisibleBeforeOrbit = Cursor.visible;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+    }
+
+    private void EndOrbitDrag()
+    {
+        if (!isOrbitDragging)
+            return;
+
+        isOrbitDragging = false;
+        Cursor.lockState = cursorLockBeforeOrbit;
+        Cursor.visible = cursorVisibleBeforeOrbit;
     }
 
     private void PositionInspectionAnchorAtCurrentCamera()

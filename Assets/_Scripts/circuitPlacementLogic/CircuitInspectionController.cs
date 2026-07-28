@@ -42,6 +42,9 @@ public class CircuitInspectionController : InteractionInspectionController
         SetComponentControlsVisible(false);
     }
 
+    protected override bool ShouldMovePlayerAfterInspection(IInspectableInteractable interactable)
+        => !TryGetCircuit(interactable, out _);
+
     private void EnsurePlacementSystem()
     {
         if (placementSystem == null)
@@ -96,7 +99,6 @@ public class CircuitInspectionController : InteractionInspectionController
         if (circuit == null)
             return false;
 
-        return circuit is CircuitInteractable
-            || string.Equals(circuit.ItemId, "Circuit", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(circuit.ItemId, "Circuit", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -71,9 +71,18 @@ public class PreviewSystem : MonoBehaviour
 
     private void PreparePreview(GameObject instance)
     {
+        foreach (ParticleSystem particles in instance.GetComponentsInChildren<ParticleSystem>(true))
+            particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
         Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
         foreach (Renderer renderer in renderers)
         {
+            if (renderer is ParticleSystemRenderer)
+            {
+                renderer.enabled = false;
+                continue;
+            }
+
             Material[] materials = renderer.materials;
             for (int i = 0; i < materials.Length; i++)
                 materials[i] = previewMaterialInstance;

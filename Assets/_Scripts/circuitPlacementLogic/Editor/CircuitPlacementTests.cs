@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -28,10 +29,130 @@ public sealed class CircuitPlacementTests
 
         bool found = CircuitWireRouter.TryFindPath(
             6, 4, new Vector2Int(1, 1), new Vector2Int(4, 1),
-            blockedCells.Contains, null, out List<Vector2Int> path);
+            blockedCells.Contains, null, null, out List<Vector2Int> path);
 
         Assert.That(found, Is.True);
         Assert.That(path.Exists(blockedCells.Contains), Is.False);
+    }
+
+    [Test]
+    public void WireRouterAvoidsOccupiedWireCellsWhenAnotherRouteExists()
+    {
+        HashSet<Vector2Int> occupiedWireCells = new()
+        {
+            new(2, 1), new(3, 1)
+        };
+
+        bool found = CircuitWireRouter.TryFindPath(
+            6, 3, new Vector2Int(1, 1), new Vector2Int(4, 1),
+            _ => false,
+            null,
+            cell => occupiedWireCells.Contains(cell) ? 1000 : 0,
+            out List<Vector2Int> path);
+
+        Assert.That(found, Is.True);
+        Assert.That(path.Exists(occupiedWireCells.Contains), Is.False);
+    }
+
+    [Test]
+    public void WireRouterAllowsOverlapWhenNoAlternativeExists()
+    {
+        Vector2Int unavoidableWireCell = new(2, 0);
+
+        bool found = CircuitWireRouter.TryFindPath(
+            4, 1, new Vector2Int(1, 0), new Vector2Int(3, 0),
+            _ => false,
+            null,
+            cell => cell == unavoidableWireCell ? 1000 : 0,
+            out List<Vector2Int> path);
+
+        Assert.That(found, Is.True);
+        Assert.That(path, Does.Contain(unavoidableWireCell));
+    }
+
+    [Test]
+    public void CircuitBoundsStayAnchoredToTileGrid()
+    {
+        GameObject circuitObject = new("Circuit Bounds Test");
+        createdObjects.Add(circuitObject);
+        SpecialPrefabInteractable circuit =
+            circuitObject.AddComponent<SpecialPrefabInteractable>();
+
+        GameObject tileGrid = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        tileGrid.name = "TileGrid";
+        tileGrid.transform.SetParent(circuitObject.transform, false);
+
+        GameObject distantVisual = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        distantVisual.name = "Transient Circuit Visual";
+        distantVisual.transform.SetParent(circuitObject.transform, false);
+        distantVisual.transform.localPosition = Vector3.one * 1000f;
+
+        Bounds bounds = circuit.GetWorldBounds();
+
+        Assert.That(bounds.center, Is.EqualTo(tileGrid.GetComponent<Renderer>().bounds.center));
+        Assert.That(bounds.size, Is.EqualTo(tileGrid.GetComponent<Renderer>().bounds.size));
+    }
+
+    [Test]
+    public void ClockwiseRotationSwapsRectangularFootprint()
+    {
+        MethodInfo rotateFootprint = typeof(ObjectPlacer).GetMethod(
+            "RotateFootprintClockwise",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+        Assert.That(rotateFootprint, Is.Not.Null);
+        Vector2Int original = new(1, 2);
+        Vector2Int once = (Vector2Int)rotateFootprint.Invoke(null, new object[] { original });
+        Vector2Int twice = (Vector2Int)rotateFootprint.Invoke(null, new object[] { once });
+
+        Assert.That(once, Is.EqualTo(new Vector2Int(2, 1)));
+        Assert.That(twice, Is.EqualTo(original));
+    }
+
+    [TestCase(0f, 1f, 0f, 0f, 0f, 1f)]
+    [TestCase(0f, -1f, 0f, 0f, 0f, 1f)]
+    [TestCase(0f, 0f, 1f, 0f, 1f, 0f)]
+    [TestCase(1f, 0f, 0f, 0f, 1f, 0f)]
+    public void ClockwiseRotationUsesBoardNormal(
+        float normalX,
+        float normalY,
+        float normalZ,
+        float forwardX,
+        float forwardY,
+        float forwardZ)
+    {
+        Vector3 normal = new(normalX, normalY, normalZ);
+        Vector3 forward = new(forwardX, forwardY, forwardZ);
+        Vector3 right = Vector3.Cross(normal, forward).normalized;
+        CircuitBoardContext board = new(
+            null,
+            null,
+            default,
+            default,
+            right,
+            forward,
+            normal,
+            1f,
+            1f,
+            10,
+            10,
+            0f);
+
+        GameObject systems = new("Object Placer Rotation Test");
+        createdObjects.Add(systems);
+        ObjectPlacer placer = systems.AddComponent<ObjectPlacer>();
+        SetPrivateField(placer, "activeBoard", board);
+        SetPrivateField(placer, "rotationQuarterTurns", 1);
+
+        Quaternion rotation = InvokePrivate<Quaternion>(placer, "GetPlacementRotation");
+
+        Assert.That(Vector3.Angle(rotation * Vector3.up, normal), Is.LessThan(0.001f));
+        Assert.That(Vector3.Angle(rotation * Vector3.forward, right), Is.LessThan(0.001f));
+
+        SetPrivateField(placer, "rotationQuarterTurns", 4);
+        Quaternion wrappedRotation = InvokePrivate<Quaternion>(placer, "GetPlacementRotation");
+        Quaternion boardRotation = Quaternion.LookRotation(forward, normal);
+        Assert.That(Quaternion.Angle(wrappedRotation, boardRotation), Is.LessThan(0.001f));
     }
 
     [Test]
@@ -73,6 +194,10 @@ public sealed class CircuitPlacementTests
             InvokePrivate(simulation, "LateUpdate");
 
             Assert.That(placement.ActiveBoard, Is.Not.Null);
+            Assert.That(placement.ActiveBoard.GridWidth, Is.EqualTo(10));
+            Assert.That(placement.ActiveBoard.GridHeight, Is.EqualTo(10));
+            Assert.That(placement.ActiveBoard.CellWorldWidth, Is.EqualTo(0.1f).Within(0.0001f));
+            Assert.That(placement.ActiveBoard.CellWorldHeight, Is.EqualTo(0.1f).Within(0.0001f));
             Assert.That(boardChanges, Is.EqualTo(1));
             Assert.That(circuitChanges, Is.EqualTo(2));
             Assert.That(simulationUpdates - initialUpdates, Is.EqualTo(1));
@@ -88,6 +213,58 @@ public sealed class CircuitPlacementTests
         {
             InvokePrivate(simulation, "OnDisable");
             InvokePrivate(placement, "OnDisable");
+        }
+    }
+
+    [Test]
+    public void PortableSnapshotValidationUsesGridStateNotWorldTransform()
+    {
+        GameObject systems = new("Puzzle Validation Systems");
+        createdObjects.Add(systems);
+        ObjectPlacer placer = systems.AddComponent<ObjectPlacer>();
+        componentDatabaseSO database = AssetDatabase.LoadAssetAtPath<componentDatabaseSO>(
+            "Assets/_Scripts/circuitPlacementLogic/ComponentDatabase.asset");
+        AssignReference(placer, "componentDatabase", database);
+
+        CircuitPuzzleSnapshotSO snapshot =
+            ScriptableObject.CreateInstance<CircuitPuzzleSnapshotSO>();
+        try
+        {
+            snapshot.ReplaceData(
+                "Portable",
+                10,
+                10,
+                new List<PuzzleComponentRecord>
+                {
+                    new()
+                    {
+                        recordId = 1,
+                        componentId = 0,
+                        gridPosition = new Vector3Int(2, 3, 0),
+                        footprint = Vector2Int.one,
+                        electricalValue = 1000d,
+                        state = CircuitComponentState.Broken,
+                        failureReason = "Puzzle fault"
+                    }
+                },
+                new List<PuzzleOpenSlotRecord>(),
+                new List<PuzzleWireRecord>());
+
+            CircuitBoardContext firstBoard = CreateLogicalBoard(Vector3.zero);
+            CircuitBoardContext movedBoard = CreateLogicalBoard(new Vector3(100f, 50f, -25f));
+
+            Assert.That(
+                CircuitPuzzleSystem.Validate(snapshot, firstBoard, placer, out string firstError),
+                Is.True,
+                firstError);
+            Assert.That(
+                CircuitPuzzleSystem.Validate(snapshot, movedBoard, placer, out string movedError),
+                Is.True,
+                movedError);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(snapshot);
         }
     }
 
@@ -114,6 +291,26 @@ public sealed class CircuitPlacementTests
         return circuit;
     }
 
+    private CircuitBoardContext CreateLogicalBoard(Vector3 position)
+    {
+        SpecialPrefabInteractable circuit = CreateCircuitBoard();
+        circuit.transform.position = position;
+        Transform tileGrid = circuit.transform.Find("TileGrid");
+        return new CircuitBoardContext(
+            circuit,
+            tileGrid,
+            tileGrid.GetComponent<MeshFilter>().sharedMesh.bounds,
+            new Plane(tileGrid.up, tileGrid.position),
+            tileGrid.right,
+            tileGrid.forward,
+            tileGrid.up,
+            0.1f,
+            0.1f,
+            10,
+            10,
+            0.002f);
+    }
+
     private static void AssignReference(UnityEngine.Object target, string propertyName, UnityEngine.Object value)
     {
         SerializedObject serializedObject = new(target);
@@ -124,8 +321,20 @@ public sealed class CircuitPlacementTests
     private static void InvokePrivate(object target, string methodName)
         => target.GetType().GetMethod(
             methodName,
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            BindingFlags.Instance | BindingFlags.NonPublic)
             .Invoke(target, null);
+
+    private static T InvokePrivate<T>(object target, string methodName)
+        => (T)target.GetType().GetMethod(
+            methodName,
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            .Invoke(target, null);
+
+    private static void SetPrivateField(object target, string fieldName, object value)
+        => target.GetType().GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(target, value);
 
     private PlacedCircuitComponent CreateComponent(int id, Vector3Int position)
     {

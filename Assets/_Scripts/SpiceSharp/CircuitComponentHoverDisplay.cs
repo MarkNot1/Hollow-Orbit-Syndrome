@@ -69,7 +69,10 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
             UpdateContent(component, expanded);
         }
 
-        popup.sizeDelta = new Vector2(PopupWidth, expanded ? ExpandedHeight : CompactHeight);
+        float popupHeight = expanded ? ExpandedHeight : CompactHeight;
+        if (expanded && component.Element.State == CircuitComponentState.Broken)
+            popupHeight += 24f;
+        popup.sizeDelta = new Vector2(PopupWidth, popupHeight);
         PositionPopup(Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
         SetVisible(true);
     }
@@ -80,16 +83,29 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
         string title = string.IsNullOrWhiteSpace(component.Element.EntityName)
             ? component.name
             : component.Element.EntityName;
+        string titleText = component.Element.State switch
+        {
+            CircuitComponentState.Broken =>
+                $"<color=#FF9A3C><b>[BROKEN] {title}</b></color>",
+            CircuitComponentState.BatteryShorted =>
+                $"<color=#FF9A3C><b>[SHORTED] {title}</b></color>",
+            _ => $"<b>{title}</b>"
+        };
         CircuitNode terminal1 = component.Element.Terminal1;
         CircuitNode terminal2 = component.Element.Terminal2;
         const string detailsBinding = "CTRL";
+        string expandedFailureReason =
+            component.Element.State == CircuitComponentState.Broken &&
+            !string.IsNullOrWhiteSpace(component.Element.FailureReason)
+                ? $"\n<color=#FF9A3C>{component.Element.FailureReason}</color>"
+                : string.Empty;
 
         if (simulation != null && simulation.Success &&
             simulation.Elements.TryGetValue(component.Element, out CircuitElementResult result))
         {
             double terminal1Voltage = simulation.GetNodeVoltage(terminal1);
             double terminal2Voltage = simulation.GetNodeVoltage(terminal2);
-            string compact = $"<b>{title}</b>  [{terminal1.TerminalLabel} to {terminal2.TerminalLabel}]\n" +
+            string compact = $"{titleText}  [{terminal1.TerminalLabel} to {terminal2.TerminalLabel}]\n" +
                 $"Final voltage: {FormatVoltage(terminal2Voltage)}\n" +
                 $"Current: {FormatCurrent(result.Current)}\n" +
                 $"<color=#AAB6C8>Hold {detailsBinding} to expand</color>";
@@ -98,14 +114,16 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
                 ? compact + "\n" +
                     $"Input {terminal1.TerminalLabel} ({terminal1.NetName}): {FormatVoltage(terminal1Voltage)}\n" +
                     $"Output {terminal2.TerminalLabel} ({terminal2.NetName}): {FormatVoltage(terminal2Voltage)}\n" +
-                    $"Voltage drop: {FormatVoltage(result.Voltage)}"
+                    $"Voltage drop: {FormatVoltage(result.Voltage)}" +
+                    expandedFailureReason
                 : compact;
         }
         else
         {
-            popupText.text = $"<b>{title}</b>  [{terminal1.TerminalLabel} to {terminal2.TerminalLabel}]\n" +
+            string compact = $"{titleText}  [{terminal1.TerminalLabel} to {terminal2.TerminalLabel}]\n" +
                 $"Final voltage: --\nCurrent: --\n" +
                 $"<color=#AAB6C8>Hold {detailsBinding} to expand</color>";
+            popupText.text = expanded ? compact + expandedFailureReason : compact;
         }
     }
 

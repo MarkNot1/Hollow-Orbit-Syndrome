@@ -64,20 +64,24 @@ public static class CircuitSimulationService
 
         try
         {
+            IReadOnlyList<CircuitElement> simulatedElements = GetPoweredElements(topology.Elements);
+            if (simulatedElements.Count == 0)
+                return CircuitSimulationResult.Failed("No complete circuit is connected to the battery.");
+
             Circuit circuit = new();
-            foreach (CircuitElement element in topology.Elements)
+            foreach (CircuitElement element in simulatedElements)
                 AddElement(circuit, element);
 
             OP simulation = new("Circuit operating point");
             Dictionary<string, RealVoltageExport> voltageExports = new(StringComparer.Ordinal);
-            foreach (CircuitNet net in topology.Nets)
+            foreach (CircuitElement element in simulatedElements)
             {
-                if (net.SpiceName != "0" && !voltageExports.ContainsKey(net.SpiceName))
-                    voltageExports.Add(net.SpiceName, new RealVoltageExport(simulation, net.SpiceName));
+                AddVoltageExport(voltageExports, simulation, GetNodeName(element.Terminal1));
+                AddVoltageExport(voltageExports, simulation, GetNodeName(element.Terminal2));
             }
 
             Dictionary<CircuitElement, RealPropertyExport> currentExports = new();
-            foreach (CircuitElement element in topology.Elements)
+            foreach (CircuitElement element in simulatedElements)
                 currentExports[element] = new RealPropertyExport(simulation, element.EntityName, "i");
 
             Dictionary<string, double> nodeVoltages = new(StringComparer.Ordinal)
@@ -94,7 +98,7 @@ public static class CircuitSimulationService
                 foreach (KeyValuePair<string, RealVoltageExport> export in voltageExports)
                     nodeVoltages[export.Key] = export.Value.Value;
 
-                foreach (CircuitElement element in topology.Elements)
+                foreach (CircuitElement element in simulatedElements)
                 {
                     double positive = GetNodeVoltage(nodeVoltages, GetNodeName(element.Terminal1));
                     double negative = GetNodeVoltage(nodeVoltages, GetNodeName(element.Terminal2));
@@ -114,10 +118,84 @@ public static class CircuitSimulationService
         }
     }
 
+    private static IReadOnlyList<CircuitElement> GetPoweredElements(
+        IReadOnlyList<CircuitElement> elements)
+    {
+        CircuitElement battery = null;
+        foreach (CircuitElement element in elements)
+        {
+            if (element.Kind == CircuitElementKind.Battery)
+            {
+                battery = element;
+                break;
+            }
+        }
+
+        if (!HasTwoConnectedTerminals(battery))
+            return Array.Empty<CircuitElement>();
+
+        List<CircuitElement> powered = new() { battery };
+        HashSet<CircuitElement> included = new() { battery };
+        HashSet<string> poweredNets = new(StringComparer.Ordinal)
+        {
+            GetNodeName(battery.Terminal1),
+            GetNodeName(battery.Terminal2)
+        };
+
+        bool addedElement;
+        do
+        {
+            addedElement = false;
+            foreach (CircuitElement element in elements)
+            {
+                if (included.Contains(element) || !HasTwoConnectedTerminals(element))
+                    continue;
+
+                string first = GetNodeName(element.Terminal1);
+                string second = GetNodeName(element.Terminal2);
+                if (!poweredNets.Contains(first) && !poweredNets.Contains(second))
+                    continue;
+
+                included.Add(element);
+                powered.Add(element);
+                poweredNets.Add(first);
+                poweredNets.Add(second);
+                addedElement = true;
+            }
+        }
+        while (addedElement);
+
+        return powered;
+    }
+
+    private static bool HasTwoConnectedTerminals(CircuitElement element)
+        => element != null && element.HasValidTerminals &&
+            element.Terminal1.Connections.Count > 0 &&
+            element.Terminal2.Connections.Count > 0;
+
+    private static void AddVoltageExport(
+        IDictionary<string, RealVoltageExport> exports,
+        OP simulation,
+        string nodeName)
+    {
+        if (nodeName != "0" && !exports.ContainsKey(nodeName))
+            exports.Add(nodeName, new RealVoltageExport(simulation, nodeName));
+    }
+
     private static void AddElement(Circuit circuit, CircuitElement element)
     {
         string first = GetNodeName(element.Terminal1);
         string second = GetNodeName(element.Terminal2);
+        if (element.IsBroken)
+        {
+            circuit.Add(new Resistor(
+                element.EntityName,
+                first,
+                second,
+                CircuitElement.BrokenResistance));
+            return;
+        }
+
         switch (element.Kind)
         {
             case CircuitElementKind.Battery:

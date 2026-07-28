@@ -207,10 +207,16 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: a80b4270d1cbf9e4ab4a6cfa4582bb62, type: 3}
       insertIndex: -1
       addedObject: {fileID: 923107878584028548}
+    - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: a80b4270d1cbf9e4ab4a6cfa4582bb62, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 5308106249939739913}
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a80b4270d1cbf9e4ab4a6cfa4582bb62, type: 3}
       insertIndex: -1
       addedObject: {fileID: 7366630276487644163}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: a80b4270d1cbf9e4ab4a6cfa4582bb62, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 3756447594180630617}
     - targetCorrespondingSourceObject: {fileID: 8164078558771037576, guid: a80b4270d1cbf9e4ab4a6cfa4582bb62, type: 3}
       insertIndex: -1
       addedObject: {fileID: 6368235655248453303}
@@ -265,8 +271,100 @@ MonoBehaviour:
   terminal1: {fileID: 5133625102188380698}
   terminal2: {fileID: 5157614460169745414}
   defaultsInitialized: 1
+  ledTurnOnCurrent: 0.0001
+  maximumVoltage: 10
+  maximumCurrent: 0
+  maximumPower: 0
+  maximumReverseVoltage: 0.5
+  failureDelay: 0.35
+  failureDefaultsInitialized: 1
+  state: 0
+  failureReason: 
+--- !u!114 &3756447594180630617
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5787555075194090966}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9eb0cb29cb948399626be998d7a9d35, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BrokenComponentVisual
+  brokenMaterialTemplate: {fileID: 2100000, guid: 1a643667120957f43b5148c09f45941b, type: 2}
+  sparks: {fileID: 4727820935383340766}
+  failureBurstCount: 14
+  batteryShortBurstCount: 18
 --- !u!4 &6564653972567863148 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: a80b4270d1cbf9e4ab4a6cfa4582bb62, type: 3}
   m_PrefabInstance: {fileID: 6670094366993729671}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1001 &7369406639012299972
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 6564653972567863148}
+    m_Modifications:
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7503737749266396755, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_Name
+      value: Damage Sparks
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+--- !u!198 &4727820935383340766 stripped
+ParticleSystem:
+  m_CorrespondingSourceObject: {fileID: 2871603711314367002, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+  m_PrefabInstance: {fileID: 7369406639012299972}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &5308106249939739913 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3454061670023537101, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+  m_PrefabInstance: {fileID: 7369406639012299972}
   m_PrefabAsset: {fileID: 0}

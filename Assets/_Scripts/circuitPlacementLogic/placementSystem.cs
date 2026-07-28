@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class placementSystem : MonoBehaviour
 {
-    private const int CircuitGridSize = 16;
+    private const int CircuitGridSize = 10;
     private const string TileGridName = "TileGrid";
     private const float GridSurfaceOffset = 0.002f;
     private static readonly int GridSizeProperty = Shader.PropertyToID("_Size");
@@ -26,6 +26,9 @@ public class placementSystem : MonoBehaviour
 
     public event Action<CircuitBoardContext> ActiveBoardChanged;
     public event Action CircuitChanged;
+
+    public void NotifyCircuitChanged()
+        => CircuitChanged?.Invoke();
 
     private void OnEnable()
     {
@@ -118,6 +121,12 @@ public class placementSystem : MonoBehaviour
                 node,
                 HandleWiringCompleted));
         }
+    }
+
+    private void HandleRotateAction()
+    {
+        if (activeState is PlacementState placementState)
+            placementState.HandleRotateAction();
     }
 
     private void ToggleRemovalState()
@@ -329,9 +338,11 @@ public class placementSystem : MonoBehaviour
         inputManager.OnClicked -= HandlePrimaryAction;
         inputManager.OnRightClicked -= ToggleRemovalState;
         inputManager.OnExit -= StopCurrentState;
+        inputManager.OnRotate -= HandleRotateAction;
         inputManager.OnClicked += HandlePrimaryAction;
         inputManager.OnRightClicked += ToggleRemovalState;
         inputManager.OnExit += StopCurrentState;
+        inputManager.OnRotate += HandleRotateAction;
     }
 
     private void UnsubscribeFromInput()
@@ -342,5 +353,6 @@ public class placementSystem : MonoBehaviour
         inputManager.OnClicked -= HandlePrimaryAction;
         inputManager.OnRightClicked -= ToggleRemovalState;
         inputManager.OnExit -= StopCurrentState;
+        inputManager.OnRotate -= HandleRotateAction;
     }
 }

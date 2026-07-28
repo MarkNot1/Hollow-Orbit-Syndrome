@@ -5,7 +5,10 @@ using UnityEngine;
 public sealed class CircuitWireSystem : MonoBehaviour
 {
     private const string WireRootName = "Circuit Wires";
+    private const string OpenSlotRootName = "Open Circuit Slots";
     private const float DefaultWireWidth = 0.003f;
+    private const int ReferenceGridSize = 16;
+    private const int WireOverlapCost = 1000;
 
     [SerializeField]
     private GameObject wirePrefab;
@@ -15,6 +18,9 @@ public sealed class CircuitWireSystem : MonoBehaviour
 
     [SerializeField, Min(0.0005f)]
     private float wireWidth = DefaultWireWidth;
+
+    [SerializeField, Min(1f)]
+    private float wireHitboxWidthMultiplier = 4f;
 
     [SerializeField]
     private float wireSurfaceOffset = 0.004f;
@@ -41,6 +47,7 @@ public sealed class CircuitWireSystem : MonoBehaviour
     private CircuitNode sourceNode;
     private CircuitNode hoveredNode;
     private WireConnection previewWire;
+    private WireConnection hoveredRemovalWire;
     private Vector2Int? lastTargetCell;
     private bool currentTailValid;
     private Material runtimeMaterial;
@@ -52,6 +59,7 @@ public sealed class CircuitWireSystem : MonoBehaviour
 
     private void OnDestroy()
     {
+        EndRemovalPreview();
         if (runtimeMaterial != null)
             Destroy(runtimeMaterial);
     }
@@ -75,6 +83,7 @@ public sealed class CircuitWireSystem : MonoBehaviour
     public void ClearActiveBoard()
     {
         CancelWiring();
+        EndRemovalPreview();
         activeBoard = null;
         activeGrid = null;
     }
@@ -86,10 +95,10 @@ public sealed class CircuitWireSystem : MonoBehaviour
             !inputManager.TryGetRaycastComponent(nodeLayerMask, out CircuitNode candidate))
             return false;
 
-        if (candidate.Owner == null)
+        if (!candidate.HasHost)
             candidate.Initialize(candidate.GetComponentInParent<PlacedCircuitComponent>());
 
-        if (candidate.Owner == null || !candidate.transform.IsChildOf(activeBoard.Circuit.transform))
+        if (!candidate.HasHost || !candidate.transform.IsChildOf(activeBoard.Circuit.transform))
             return false;
 
         node = candidate;
@@ -99,7 +108,7 @@ public sealed class CircuitWireSystem : MonoBehaviour
     public bool BeginWiring(CircuitNode node)
     {
         CancelWiring();
-        if (activeBoard == null || activeGrid == null || node == null || node.Owner == null)
+        if (activeBoard == null || activeGrid == null || node == null || !node.HasHost)
             return false;
 
         if (!TryGetEscapeCell(node, out Vector2Int sourceEscape))
@@ -212,33 +221,193 @@ public sealed class CircuitWireSystem : MonoBehaviour
         if (!wire.transform.IsChildOf(activeBoard.Circuit.transform))
             return false;
 
+        if (hoveredRemovalWire == wire)
+            hoveredRemovalWire = null;
         RemoveWire(wire);
         return true;
     }
 
-    public void RemoveConnections(PlacedCircuitComponent component)
+    public void UpdateRemovalPreview(placementInputManager inputManager)
     {
-        if (component == null)
-            return;
-
-        HashSet<WireConnection> attached = new();
-        foreach (CircuitNode node in component.GetComponentsInChildren<CircuitNode>(true))
+        WireConnection candidate = null;
+        if (activeBoard != null && inputManager != null && !inputManager.IsPointerOverUI() &&
+            inputManager.TryGetRaycastComponent(
+                wireLayerMask,
+                out WireConnection raycastWire) &&
+            raycastWire.transform.IsChildOf(activeBoard.Circuit.transform))
         {
-            foreach (WireConnection connection in node.Connections)
-            {
-                if (connection != null)
-                    attached.Add(connection);
-            }
+            candidate = raycastWire;
         }
 
-        foreach (WireConnection connection in attached)
-            RemoveWire(connection);
+        if (candidate == hoveredRemovalWire)
+            return;
+
+        EndRemovalPreview();
+        hoveredRemovalWire = candidate;
+        if (hoveredRemovalWire != null)
+            hoveredRemovalWire.SetAppearance(EnsureMaterial(), invalidColor);
+    }
+
+    public void EndRemovalPreview()
+    {
+        if (hoveredRemovalWire == null)
+            return;
+
+        hoveredRemovalWire.SetAppearance(EnsureMaterial(), wireColor);
+        hoveredRemovalWire = null;
+    }
+
+    public OpenCircuitSlot PreserveConnections(PlacedCircuitComponent component)
+    {
+        if (component?.Element == null || !component.Element.HasValidTerminals || activeBoard == null)
+            return null;
+
+        CircuitNode first = component.Element.Terminal1;
+        CircuitNode second = component.Element.Terminal2;
+        OpenCircuitSlot slot = CreateOpenSlot(
+            Guid.NewGuid().ToString("N"),
+            component.GridPosition,
+            component.FootprintSize,
+            component.RotationQuarterTurns,
+            activeBoard.TileGrid.InverseTransformPoint(first.ConnectionPoint.position),
+            activeBoard.TileGrid.InverseTransformPoint(second.ConnectionPoint.position));
+        RebindConnections(first, slot.Terminal1);
+        RebindConnections(second, slot.Terminal2);
+        slot.RefreshLabels();
+        return slot;
+    }
+
+    public bool HasBlockingOpenSlot(Vector3Int position, Vector2Int size, out OpenCircuitSlot exact)
+    {
+        exact = null;
+        if (activeBoard?.Circuit == null)
+            return false;
+
+        foreach (OpenCircuitSlot slot in activeBoard.Circuit.GetComponentsInChildren<OpenCircuitSlot>(true))
+        {
+            if (!slot.Overlaps(position, size))
+                continue;
+            if (slot.IsExactReplacement(position, size))
+            {
+                exact = slot;
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public bool TryClaimOpenSlot(PlacedCircuitComponent component)
+    {
+        if (component?.Element == null || !component.Element.HasValidTerminals ||
+            HasBlockingOpenSlot(component.GridPosition, component.FootprintSize, out OpenCircuitSlot slot) ||
+            slot == null)
+            return false;
+
+        CircuitNode first = component.Element.Terminal1;
+        CircuitNode second = component.Element.Terminal2;
+        float direct = DistanceSquared(slot.Terminal1, first) + DistanceSquared(slot.Terminal2, second);
+        float crossed = DistanceSquared(slot.Terminal1, second) + DistanceSquared(slot.Terminal2, first);
+        CircuitNode replacement1 = direct <= crossed ? first : second;
+        CircuitNode replacement2 = direct <= crossed ? second : first;
+        RebindConnections(slot.Terminal1, replacement1);
+        RebindConnections(slot.Terminal2, replacement2);
+        Destroy(slot.gameObject);
+        return true;
+    }
+
+    public IReadOnlyList<WireConnection> GetActiveWires()
+    {
+        if (activeBoard?.Circuit != null &&
+            wiresByCircuit.TryGetValue(activeBoard.Circuit, out List<WireConnection> wires))
+            return wires;
+        return Array.Empty<WireConnection>();
+    }
+
+    public OpenCircuitSlot[] GetActiveOpenSlots()
+        => activeBoard?.Circuit == null
+            ? Array.Empty<OpenCircuitSlot>()
+            : activeBoard.Circuit.GetComponentsInChildren<OpenCircuitSlot>(true);
+
+    public OpenCircuitSlot CreateOpenSlot(
+        string id,
+        Vector3Int position,
+        Vector2Int size,
+        int quarterTurns,
+        Vector3 firstBoardLocalPosition,
+        Vector3 secondBoardLocalPosition)
+    {
+        if (activeBoard == null)
+            return null;
+
+        Transform root = activeBoard.TileGrid.Find(OpenSlotRootName);
+        if (root == null)
+        {
+            root = new GameObject(OpenSlotRootName).transform;
+            root.SetParent(activeBoard.TileGrid, false);
+        }
+
+        GameObject slotObject = new($"Open Slot {id}");
+        slotObject.transform.SetParent(root, false);
+        OpenCircuitSlot slot = slotObject.AddComponent<OpenCircuitSlot>();
+        CircuitNode first = CreateOpenNode(slotObject.transform, "A", firstBoardLocalPosition);
+        CircuitNode second = CreateOpenNode(slotObject.transform, "B", secondBoardLocalPosition);
+        slot.Initialize(id, position, size, quarterTurns, first, second);
+        return slot;
+    }
+
+    public WireConnection RestoreWire(
+        CircuitNode start,
+        CircuitNode end,
+        IReadOnlyList<Vector2Int> route)
+    {
+        if (activeBoard == null || start == null || end == null)
+            return null;
+
+        Transform root = EnsureWireRoot();
+        List<Vector3> points = BuildLocalPoints(
+            route,
+            start.ConnectionPoint.position,
+            end.ConnectionPoint.position);
+        WireConnection wire = CreateWire($"Wire {start.TerminalId}-{end.TerminalId}", root);
+        wire.Initialize(
+            start, end, route, points, GetScaledWireWidth(), EnsureMaterial(), wireColor,
+            wireHitboxWidthMultiplier, true);
+        wiresByCircuit[activeBoard.Circuit].Add(wire);
+        RegisterCells(activeBoard.Circuit, route);
+        start.SlotOwner?.RefreshLabels();
+        end.SlotOwner?.RefreshLabels();
+        ConnectionCreated?.Invoke(wire);
+        return wire;
+    }
+
+    public void ClearActiveWiresAndSlots()
+    {
+        if (activeBoard?.Circuit == null)
+            return;
+
+        if (wiresByCircuit.TryGetValue(activeBoard.Circuit, out List<WireConnection> wires))
+        {
+            foreach (WireConnection wire in new List<WireConnection>(wires))
+                RemoveWire(wire);
+            wires.Clear();
+        }
+        if (wireCellsByCircuit.TryGetValue(activeBoard.Circuit, out var occupied))
+            occupied.Clear();
+        foreach (OpenCircuitSlot slot in GetActiveOpenSlots())
+        {
+            if (slot != null)
+                Destroy(slot.gameObject);
+        }
     }
 
     public void RemoveWire(WireConnection wire)
     {
         if (wire == null)
             return;
+
+        if (hoveredRemovalWire == wire)
+            hoveredRemovalWire = null;
 
         SpecialPrefabInteractable circuit = wire.GetComponentInParent<SpecialPrefabInteractable>();
         if (circuit != null)
@@ -248,9 +417,13 @@ public sealed class CircuitWireSystem : MonoBehaviour
             UnregisterCells(circuit, wire.RoutedCells);
         }
 
+        CircuitNode formerStart = wire.StartNode;
+        CircuitNode formerEnd = wire.EndNode;
         wire.Disconnect();
         ConnectionRemoved?.Invoke(wire);
         Destroy(wire.gameObject);
+        formerStart?.SlotOwner?.RefreshLabels();
+        formerEnd?.SlotOwner?.RefreshLabels();
     }
 
     private void RebuildTail(Vector2Int targetCell, CircuitNode destination)
@@ -274,6 +447,7 @@ public sealed class CircuitWireSystem : MonoBehaviour
             targetCell,
             cell => committed.Contains(cell) || IsComponentBlocked(cell),
             IsCommittedMoveBlocked,
+            GetWireOverlapCost,
             out List<Vector2Int> route);
 
         if (currentTailValid)
@@ -309,15 +483,26 @@ public sealed class CircuitWireSystem : MonoBehaviour
     private bool IsComponentBlocked(Vector2Int cell)
         => activeGrid.IsOccupied(new Vector3Int(cell.x, cell.y, 0));
 
+    private int GetWireOverlapCost(Vector2Int cell)
+    {
+        if (activeBoard != null &&
+            wireCellsByCircuit.TryGetValue(activeBoard.Circuit, out Dictionary<Vector2Int, int> occupied) &&
+            occupied.TryGetValue(cell, out int wireCount))
+        {
+            return WireOverlapCost * wireCount;
+        }
+
+        return 0;
+    }
+
     private bool TryGetEscapeCell(CircuitNode node, out Vector2Int escapeCell)
     {
         escapeCell = default;
-        if (node?.Owner == null || activeBoard == null || activeGrid == null)
+        if (node == null || !node.HasHost || activeBoard == null || activeGrid == null)
             return false;
 
-        PlacedCircuitComponent owner = node.Owner;
-        Vector3Int origin = owner.GridPosition;
-        Vector2Int size = owner.FootprintSize;
+        Vector3Int origin = node.Owner != null ? node.Owner.GridPosition : node.SlotOwner.GridPosition;
+        Vector2Int size = node.Owner != null ? node.Owner.FootprintSize : node.SlotOwner.FootprintSize;
         Vector3 footprintCenter = activeBoard.GetFootprintCenter(origin, size);
         Vector3 terminalOffset = node.ConnectionPoint.position - footprintCenter;
         float horizontalOffset = Vector3.Dot(terminalOffset, activeBoard.GridRight);
@@ -363,9 +548,8 @@ public sealed class CircuitWireSystem : MonoBehaviour
 
     private CircuitNode GetValidDestination(CircuitNode candidate)
     {
-        if (candidate == null || candidate == sourceNode || candidate.Owner == null ||
-            candidate.Owner == sourceNode.Owner || sourceNode.IsConnectedTo(candidate) ||
-            CircuitNode.WouldShortSupply(sourceNode, candidate))
+        if (candidate == null || candidate == sourceNode || !candidate.HasHost ||
+            IsSameHost(candidate, sourceNode) || sourceNode.IsConnectedTo(candidate))
             return null;
 
         return activeBoard.IsInside(candidate.GetGridCell()) ? candidate : null;
@@ -378,7 +562,11 @@ public sealed class CircuitWireSystem : MonoBehaviour
             fullPath,
             sourceNode.ConnectionPoint.position,
             destination != null ? destination.ConnectionPoint.position : (Vector3?)null);
-        previewWire.UpdatePreview(points, wireWidth, EnsureMaterial(), currentTailValid ? wireColor : invalidColor);
+        previewWire.UpdatePreview(
+            points,
+            GetScaledWireWidth(),
+            EnsureMaterial(),
+            currentTailValid ? wireColor : invalidColor);
     }
 
     private void CompleteWire(CircuitNode destination)
@@ -390,12 +578,23 @@ public sealed class CircuitWireSystem : MonoBehaviour
             destination.ConnectionPoint.position);
         Transform root = EnsureWireRoot();
         WireConnection wire = CreateWire($"Wire {sourceNode.TerminalId}-{destination.TerminalId}", root);
-        wire.Initialize(sourceNode, destination, route, points, wireWidth, EnsureMaterial(), wireColor, true);
+        wire.Initialize(
+            sourceNode,
+            destination,
+            route,
+            points,
+            GetScaledWireWidth(),
+            EnsureMaterial(),
+            wireColor,
+            wireHitboxWidthMultiplier,
+            true);
 
         List<WireConnection> wires = wiresByCircuit[activeBoard.Circuit];
         wires.Add(wire);
         RegisterCells(activeBoard.Circuit, route);
         ConnectionCreated?.Invoke(wire);
+        sourceNode.SlotOwner?.RefreshLabels();
+        destination.SlotOwner?.RefreshLabels();
 
         WireConnection preview = previewWire;
         previewWire = null;
@@ -464,9 +663,6 @@ public sealed class CircuitWireSystem : MonoBehaviour
         if (instance.GetComponent<MeshRenderer>() == null)
             instance.AddComponent<MeshRenderer>();
 
-        LineRenderer obsoleteLine = instance.GetComponent<LineRenderer>();
-        if (obsoleteLine != null)
-            Destroy(obsoleteLine);
         return wire;
     }
 
@@ -493,6 +689,15 @@ public sealed class CircuitWireSystem : MonoBehaviour
         if (shader != null)
             runtimeMaterial = new Material(shader) { name = "Runtime Circuit Wire" };
         return runtimeMaterial;
+    }
+
+    private float GetScaledWireWidth()
+    {
+        if (activeBoard == null || activeBoard.GridWidth <= 0)
+            return wireWidth;
+
+        // Preserve the wire-to-cell proportion when the logical board resolution changes.
+        return wireWidth * ReferenceGridSize / activeBoard.GridWidth;
     }
 
     private void RegisterExistingWires()
@@ -556,5 +761,37 @@ public sealed class CircuitWireSystem : MonoBehaviour
             Cell = cell;
             Distance = distance;
         }
+    }
+
+    private CircuitNode CreateOpenNode(Transform parent, string nodeName, Vector3 boardLocalPosition)
+    {
+        GameObject nodeObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        nodeObject.name = $"Open Node {nodeName}";
+        nodeObject.transform.SetParent(parent, false);
+        nodeObject.transform.position = activeBoard.TileGrid.TransformPoint(boardLocalPosition);
+        float scale = Mathf.Min(activeBoard.CellWorldWidth, activeBoard.CellWorldHeight) * 0.16f;
+        nodeObject.transform.localScale = Vector3.one * scale;
+        CircuitNode node = nodeObject.AddComponent<CircuitNode>();
+        node.SetTerminalId(nodeName);
+        return node;
+    }
+
+    private static void RebindConnections(CircuitNode oldNode, CircuitNode newNode)
+    {
+        foreach (WireConnection wire in new List<WireConnection>(oldNode.Connections))
+            wire.ReplaceEndpoint(oldNode, newNode);
+    }
+
+    private static float DistanceSquared(CircuitNode first, CircuitNode second)
+        => first == null || second == null
+            ? float.PositiveInfinity
+            : (first.ConnectionPoint.position - second.ConnectionPoint.position).sqrMagnitude;
+
+    private static bool IsSameHost(CircuitNode first, CircuitNode second)
+    {
+        if (first.Owner != null && first.Owner == second.Owner)
+            return first.Owner.Element == null ||
+                first.Owner.Element.Kind != CircuitElementKind.Battery;
+        return first.SlotOwner != null && first.SlotOwner == second.SlotOwner;
     }
 }
