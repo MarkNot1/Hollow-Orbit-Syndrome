@@ -15,19 +15,19 @@ MonoBehaviour:
   textureSizeX: 0.0625
   textureSizeY: 0.0625
   textureDataList:
-  - voxelType: 8
+  - voxelType: 3
     up: {x: 0, y: 2}
     down: {x: 0, y: 2}
     side: {x: 0, y: 2}
     isSolid: 1
-    generatesCollider: 0
+    generatesCollider: 1
     isSmoothable: 1
-  - voxelType: 9
+  - voxelType: 4
     up: {x: 0, y: 0}
     down: {x: 0, y: 0}
     side: {x: 0, y: 0}
     isSolid: 1
-    generatesCollider: 0
+    generatesCollider: 1
     isSmoothable: 0
   - voxelType: 1
     up: {x: 0, y: 3}
@@ -36,10 +36,17 @@ MonoBehaviour:
     isSolid: 0
     generatesCollider: 0
     isSmoothable: 0
-  - voxelType: 10
+  - voxelType: 2
     up: {x: 2, y: 0}
     down: {x: 2, y: 0}
     side: {x: 2, y: 0}
     isSolid: 1
-    generatesCollider: 0
+    generatesCollider: 1
+    isSmoothable: 0
+  - voxelType: 5
+    up: {x: 1, y: 2}
+    down: {x: 1, y: 2}
+    side: {x: 1, y: 2}
+    isSolid: 1
+    generatesCollider: 1
     isSmoothable: 0

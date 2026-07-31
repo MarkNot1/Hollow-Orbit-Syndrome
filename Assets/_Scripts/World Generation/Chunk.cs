@@ -61,7 +61,7 @@ public static class Chunk
         if (InRange(chunkData, localPosition.x) && InRangeHeight(chunkData, localPosition.y) && InRange(chunkData, localPosition.z))
         {
             int index = GetIndexFromPosition(chunkData, localPosition.x, localPosition.y, localPosition.z);
-            chunkData.voxels[index] = voxel;
+            chunkData.SetVoxel(localPosition.x, localPosition.y, localPosition.z, voxel);
         }
         else
         {
@@ -86,11 +86,77 @@ public static class Chunk
 
     public static MeshData GetChunkMeshData(ChunkData chunkData)
     {
-        MeshData meshData = new MeshData(true);
+        return GetChunkMeshData(new ChunkMeshContext(chunkData), true);
+    }
 
-        LoopThroughTheVoxels(chunkData, (x, y, z) => meshData = VoxelHelper.GetMeshData(chunkData, x, y, z, meshData, chunkData.voxels[GetIndexFromPosition(chunkData, x, y, z)]));
+    public static MeshData GetChunkMeshData(
+        ChunkMeshContext context,
+        bool collectCollider,
+        bool solidColor = false)
+    {
+        ChunkData chunkData = context.Center;
+        if (context.CanUseColumnTerrain)
+            return GetColumnTerrainMeshData(context, collectCollider, solidColor);
 
+        MeshData meshData = new MeshData(collectCollider);
+        int minimumY = Mathf.Max(0, chunkData.MinimumSolidY);
+        int maximumY = Mathf.Min(chunkData.chunkHeight - 1, chunkData.MaximumSolidY);
+        for (int z = 0; z < chunkData.chunkSize; z++)
+        {
+            for (int y = minimumY; y <= maximumY; y++)
+            {
+                for (int x = 0; x < chunkData.chunkSize; x++)
+                {
+                    VoxelType type = chunkData.voxels[GetIndexFromPosition(chunkData, x, y, z)];
+                    meshData = VoxelHelper.GetMeshData(context, x, y, z, meshData, type, solidColor);
+                }
+            }
+        }
+        return meshData;
+    }
 
+    private static MeshData GetColumnTerrainMeshData(
+        ChunkMeshContext context,
+        bool collectCollider,
+        bool solidColor)
+    {
+        ChunkData data = context.Center;
+        int size = data.chunkSize;
+        int height = data.chunkHeight;
+        var meshData = new MeshData(collectCollider, size * size * 2);
+        for (int z = 0; z < size; z++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                FarSurfaceColumn column = context.GetFarSurfaceColumn(x, z);
+                if (!column.HasSurface)
+                    continue;
+
+                int lowestHorizontalTop = Mathf.Min(
+                    Mathf.Min(
+                        context.GetFarSurfaceColumn(x - 1, z).topY,
+                        context.GetFarSurfaceColumn(x + 1, z).topY),
+                    Mathf.Min(
+                        context.GetFarSurfaceColumn(x, z - 1).topY,
+                        context.GetFarSurfaceColumn(x, z + 1).topY));
+                int firstVisibleY = Mathf.Min(
+                    column.topY,
+                    Mathf.Max(0, lowestHorizontalTop + 1));
+
+                bool bottomVisible = !VoxelRuntimeData.IsSolid(context.GetVoxel(x, -1, z));
+                if (bottomVisible && firstVisibleY > 0)
+                {
+                    VoxelType bottomType = data.voxels[x + size * height * z];
+                    meshData = VoxelHelper.GetMeshData(context, x, 0, z, meshData, bottomType, solidColor);
+                }
+
+                for (int y = firstVisibleY; y <= column.topY; y++)
+                {
+                    VoxelType type = data.voxels[x + size * y + size * height * z];
+                    meshData = VoxelHelper.GetMeshData(context, x, y, z, meshData, type, solidColor);
+                }
+            }
+        }
         return meshData;
     }
 

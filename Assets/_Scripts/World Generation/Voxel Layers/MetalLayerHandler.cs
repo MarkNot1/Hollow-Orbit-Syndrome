@@ -8,6 +8,8 @@ public class MetalLayerHandler : VoxelLayerHandler
     [SerializeField]
     private NoiseSettings metalNoiseSettings;
 
+    public NoiseSettings MetalNoiseSettings => metalNoiseSettings;
+
     public DomainWarping domainWarping;
 
     protected override bool tryHandling(ChunkData chunckData, int x, int y, int z, int surfaceHeightNoise, Vector2Int mapSeedOffset)
@@ -16,8 +18,11 @@ public class MetalLayerHandler : VoxelLayerHandler
         if (worldY > surfaceHeightNoise)
             return false;
 
-        metalNoiseSettings.worldOffset = mapSeedOffset;
-        float metalNoiseValue = domainWarping.GenerateDomainNoise(chunckData.worldPosition.x + x, chunckData.worldPosition.z + z, metalNoiseSettings);
+        float metalNoiseValue = domainWarping.GenerateDomainNoise(
+            chunckData.worldPosition.x + x,
+            chunckData.worldPosition.z + z,
+            metalNoiseSettings,
+            mapSeedOffset);
 
         if (metalNoiseValue > metalThreshold)
         {

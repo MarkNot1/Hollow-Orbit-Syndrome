@@ -23,10 +23,10 @@ RenderSettings:
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
-  m_AmbientIntensity: 1
+  m_AmbientIntensity: 0.7
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: 71bd9ed404394ebcaa929aaee83e1420, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -1267,7 +1267,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UndergroundLayerHandler
   Next: {fileID: 1565985016}
-  undergroundVoxelType: 9
+  undergroundVoxelType: 2
 --- !u!4 &432998746
 Transform:
   m_ObjectHideFlags: 0
@@ -2069,7 +2069,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SurfaceLayerHandler
   Next: {fileID: 432998745}
-  surfaceVoxelType: 8
+  surfaceVoxelType: 3
 --- !u!4 &1092492658
 Transform:
   m_ObjectHideFlags: 0
@@ -2861,7 +2861,16 @@ MonoBehaviour:
   mapSizeInChunks: 6
   chunkSize: 16
   chunkHeight: 100
-  chunkDrawingRange: 3
+  chunkDrawingRange: 8
+  distanceSimplification:
+    enabled: 1
+    uniformSurfaceRendering: 0
+    lod1StartChunks: 4
+    lod2StartChunks: 6
+    lod3StartChunks: 6
+  generationWorkerLimit: 0
+  meshUploadsPerFrame: 4
+  meshUploadBudgetMs: 2
   chunkPrefab: {fileID: 5975047598341480873, guid: 8e8194e98d85e934591fe4466be767a4, type: 3}
   worldRenderer: {fileID: 2137643157}
   circuitVoxelPrefab: {fileID: 6412820369796514768, guid: 0a9de5ffbd442c2449a985d76f866ae2, type: 3}
@@ -3579,7 +3588,6 @@ MonoBehaviour:
   wireSurfaceOffset: 0.004
   wireColor: {r: 0.4716981, g: 0.24304007, b: 0.03337486, a: 1}
   invalidColor: {r: 1, g: 0, b: 0, a: 1}
-  removalHoverColor: {r: 1, g: 0, b: 0, a: 0.2}
   nodeLayerMask:
     serializedVersion: 2
     m_Bits: 256
@@ -3631,6 +3639,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WorldRenderer
   chunkPrefab: {fileID: 5975047598341480873, guid: 8e8194e98d85e934591fe4466be767a4, type: 3}
+  maxPooledChunks: 64
 --- !u!4 &2137643158
 Transform:
   m_ObjectHideFlags: 0

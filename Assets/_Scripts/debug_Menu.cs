@@ -90,17 +90,30 @@ public class debug_Menu : MonoBehaviour
 
             float now = Time.unscaledTime;
             fpsHistory.Enqueue((now, instantFps));
-            while (fpsHistory.Count > 0 && now - fpsHistory.Peek().unscaledTime > FpsHistoryDuration)
-                fpsHistory.Dequeue();
+            if (fpsHistory.Count == 1 || instantFps < lowestFpsLast10s)
+                lowestFpsLast10s = instantFps;
 
-            float min = float.MaxValue;
-            foreach (var sample in fpsHistory)
+            bool removedMinimum = false;
+            while (fpsHistory.Count > 0 && now - fpsHistory.Peek().unscaledTime > FpsHistoryDuration)
             {
-                if (sample.fps < min)
-                    min = sample.fps;
+                var expired = fpsHistory.Dequeue();
+                if (expired.fps <= lowestFpsLast10s + 0.0001f)
+                    removedMinimum = true;
             }
 
-            lowestFpsLast10s = min < float.MaxValue ? min : instantFps;
+            // The old implementation rescanned up to ten seconds of samples
+            // every frame even while the overlay was hidden. Recompute only
+            // when the sample holding the current minimum actually expires.
+            if (removedMinimum)
+            {
+                float min = float.MaxValue;
+                foreach (var sample in fpsHistory)
+                {
+                    if (sample.fps < min)
+                        min = sample.fps;
+                }
+                lowestFpsLast10s = min < float.MaxValue ? min : instantFps;
+            }
         }
     }
 

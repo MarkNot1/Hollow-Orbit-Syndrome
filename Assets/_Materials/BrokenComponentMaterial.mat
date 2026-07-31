@@ -29,9 +29,9 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _SmudgeAmount: 0.58
+    - _SmudgeAmount: 0.4
     - _SmudgeDarkness: 0.14
-    - _SmudgeScale: 20
+    - _SmudgeScale: 15
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []

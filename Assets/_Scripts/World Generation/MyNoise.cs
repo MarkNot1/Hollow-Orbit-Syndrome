@@ -28,6 +28,15 @@ public static class MyNoise
 
     public static float OctavePerlin(float x, float z, NoiseSettings noiseSettings)
     {
+        return OctavePerlin(x, z, noiseSettings, noiseSettings.worldOffset);
+    }
+
+    public static float OctavePerlin(
+        float x,
+        float z,
+        NoiseSettings noiseSettings,
+        Vector2Int worldOffset)
+    {
         x *= noiseSettings.noiseZoom;
         z *= noiseSettings.noiseZoom;
         x += noiseSettings.noiseZoom;
@@ -40,8 +49,9 @@ public static class MyNoise
 
         for (int i = 0; i < noiseSettings.octaves; i++)
         {
-            total += Mathf.PerlinNoise((noiseSettings.offset.x + noiseSettings.worldOffset.x + x) * frequency,
-             (noiseSettings.offset.y + noiseSettings.worldOffset.y + z) * frequency) * amplitude;
+            total += Mathf.PerlinNoise(
+                (noiseSettings.offset.x + worldOffset.x + x) * frequency,
+                (noiseSettings.offset.y + worldOffset.y + z) * frequency) * amplitude;
 
              amplitudeSum += amplitude;
 

@@ -7,8 +7,25 @@ public class DomainWarping : MonoBehaviour
 
     public float GenerateDomainNoise(int x, int z, NoiseSettings defaultNoiseSettings)
     {
+        return GenerateDomainNoise(
+            x,
+            z,
+            defaultNoiseSettings,
+            defaultNoiseSettings.worldOffset);
+    }
+
+    public float GenerateDomainNoise(
+        int x,
+        int z,
+        NoiseSettings defaultNoiseSettings,
+        Vector2Int worldOffset)
+    {
         Vector2 domainOffset = GenerateDomainOffset(x, z);
-        return MyNoise.OctavePerlin(x + domainOffset.x, z + domainOffset.y, defaultNoiseSettings);
+        return MyNoise.OctavePerlin(
+            x + domainOffset.x,
+            z + domainOffset.y,
+            defaultNoiseSettings,
+            worldOffset);
     }
 
     public Vector2 GenerateDomainOffset(int x, int z)

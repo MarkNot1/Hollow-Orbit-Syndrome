@@ -1,17 +1,13 @@
 using UnityEngine;
 
-public enum VoxelType
+public enum VoxelType : byte
 {
     Nothing,
     Air,
-    Ground,
-    Wall,
-    Water,
-    Sand,
-    Grass,
     Rock,
     Infected_Growth,
     Ship_Metal,
-    Metal
+    Metal,
+
 
 }

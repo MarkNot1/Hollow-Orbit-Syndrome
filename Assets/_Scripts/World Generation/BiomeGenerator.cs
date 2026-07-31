@@ -50,10 +50,35 @@ public class BiomeGenerator : MonoBehaviour
         }
     }
 
+    public TerrainGenerationSnapshot CreateSnapshot()
+    {
+        RefreshLayerReferences();
+        var metals = new List<MetalColumnRuleSnapshot>();
+        if (aditionalLayerHandlers != null)
+        {
+            foreach (VoxelLayerHandler layer in aditionalLayerHandlers)
+            {
+                if (layer is MetalLayerHandler metal)
+                    metals.Add(new MetalColumnRuleSnapshot(metal));
+            }
+        }
+
+        return new TerrainGenerationSnapshot(
+            new NoiseSettingsSnapshot(biomeNoiseSettings),
+            new DomainWarpSnapshot(domainWarping),
+            UseDomainWarping,
+            surfaceVoxelType,
+            undergroundVoxelType,
+            metals.ToArray());
+    }
+
     public ChunkData ProcessChunckColumn(ChunkData data, int x, int z, Vector2Int mapSeedOffset)
     {
-        biomeNoiseSettings.worldOffset = mapSeedOffset;
-        int groundPosition = GetSurfaceHeightNoise(data.worldPosition.x + x, data.worldPosition.z + z, data.chunkHeight);
+        int groundPosition = GetSurfaceHeightNoise(
+            data.worldPosition.x + x,
+            data.worldPosition.z + z,
+            data.chunkHeight,
+            mapSeedOffset);
 
         if (useBaseLayerTypes)
         {
@@ -96,14 +121,27 @@ public class BiomeGenerator : MonoBehaviour
 
     public int GetSurfaceHeightNoise(int x, int z, int chunkHeight)
     {
+        return GetSurfaceHeightNoise(x, z, chunkHeight, biomeNoiseSettings.worldOffset);
+    }
+
+    public int GetSurfaceHeightNoise(
+        int x,
+        int z,
+        int chunkHeight,
+        Vector2Int worldOffset)
+    {
         float terrainHeight;
         if (UseDomainWarping == false)
         {
-            terrainHeight = MyNoise.OctavePerlin(x, z, biomeNoiseSettings);
+            terrainHeight = MyNoise.OctavePerlin(x, z, biomeNoiseSettings, worldOffset);
         }
         else
         {
-            terrainHeight = domainWarping.GenerateDomainNoise(x, z, biomeNoiseSettings);
+            terrainHeight = domainWarping.GenerateDomainNoise(
+                x,
+                z,
+                biomeNoiseSettings,
+                worldOffset);
         }    
         terrainHeight = MyNoise.Redistribution(terrainHeight, biomeNoiseSettings);
         int surfaceHeight = (int)MyNoise.RemapValue01ToInt(terrainHeight, 0, chunkHeight);

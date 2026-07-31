@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,6 +6,7 @@ public class WorldRenderer : MonoBehaviour
 {
     public GameObject chunkPrefab;
     public Queue<ChunkRenderer> chunkPool = new Queue<ChunkRenderer>();
+    [SerializeField, Min(8)] private int maxPooledChunks = 64;
 
     public void Clear(WorldData worldData)
     {
@@ -21,7 +21,9 @@ public class WorldRenderer : MonoBehaviour
         chunkPool.Clear();
     }
 
-    internal ChunkRenderer RenderChunk(WorldData worldData, Vector3Int position, MeshData meshData)
+    internal ChunkRenderer RenderChunk(
+        WorldData worldData,
+        Vector3Int position)
     {
         ChunkRenderer newChunk = null;
 
@@ -38,14 +40,21 @@ public class WorldRenderer : MonoBehaviour
         newChunk.gameObject.SetActive(true);
 
         newChunk.InitializeChunk(worldData.chunkDataDictionary[position]);
-        newChunk.UpdateChunk(meshData);
 
         return newChunk;
     }
 
     public void RemoveChunk(ChunkRenderer chunk)
     {
+        chunk.ResetForPool();
         chunk.gameObject.SetActive(false);
+        if (chunkPool.Count >= maxPooledChunks)
+        {
+            // A streaming fault must not turn the renderer pool into permanent
+            // mesh memory. Normal movement reuses far fewer than this cap.
+            Destroy(chunk.gameObject);
+            return;
+        }
         chunkPool.Enqueue(chunk);
     }
 }
