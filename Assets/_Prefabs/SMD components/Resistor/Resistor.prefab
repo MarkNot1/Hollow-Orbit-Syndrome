@@ -125,6 +125,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Damage Sparks
       objectReference: {fileID: 0}
+    - target: {fileID: 7503737749266396755, guid: 00d3aad5360bf7949b3187323f2be9e0, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -211,6 +215,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: deefbec8494aeec4eacacf2445329748, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3725852398317204115}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: deefbec8494aeec4eacacf2445329748, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4724297734453944105}
     - targetCorrespondingSourceObject: {fileID: 8164078558771037576, guid: deefbec8494aeec4eacacf2445329748, type: 3}
       insertIndex: -1
       addedObject: {fileID: 4030387906439138582}
@@ -290,6 +297,30 @@ MonoBehaviour:
   sparks: {fileID: 8210805029350114288}
   failureBurstCount: 14
   batteryShortBurstCount: 18
+  intermittentBurstCount: 5
+  minimumSparkInterval: 1
+  maximumSparkInterval: 5
+  inspectedSizeMultiplier: 2
+  worldSizeMultiplier: 3
+  inspectedSpreadMultiplier: 2
+  sparkLightColor: {r: 0.68, g: 0.86, b: 1, a: 1}
+  sparkLightIntensity: 0.08
+  sparkLightRange: 0.08
+  maximumSparkLights: 3
+--- !u!114 &4724297734453944105
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7352410886749273829}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5716c1ba6d177574b831b42e48bfd197, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Item
+  item: {fileID: 11400000, guid: e2d7c2cd6809afc4ab20c0ba11e2bd3f, type: 2}
+  amount: 1
 --- !u!4 &7873086080626975839 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: deefbec8494aeec4eacacf2445329748, type: 3}

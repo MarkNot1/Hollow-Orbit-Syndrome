@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -12,6 +13,10 @@ public class PlayerInput : MonoBehaviour
     [SerializeField]
     [Tooltip("Assign the InputSystem_Actions asset. Must contain a 'Player' action map with: Move, Look, Jump, Sprint, Fly, DestroyBlock (optional).")]
     private InputActionAsset inputActions;
+
+    [Header("Reticle")]
+    [SerializeField] private Camera reticleCamera;
+    [SerializeField, Min(0f)] private float reticleRayLength = 5f;
 
     public event Action OnFly;
     /// <summary>Fired when <c>DestroyBlock</c> is performed (e.g. right mouse).</summary>
@@ -37,9 +42,16 @@ public class PlayerInput : MonoBehaviour
     private InputAction _interactAction;
     private InputAction _circuitDetailsAction;
     private bool gameplayInputBlocked;
+    private readonly RaycastHit[] reticleHits = new RaycastHit[32];
+    private readonly List<MonoBehaviour> reticleBehaviours = new List<MonoBehaviour>();
+    private int reticleHitCount;
+    private int reticleRaycastFrame = -1;
 
     private void Awake()
     {
+        if (reticleCamera == null)
+            reticleCamera = GetComponentInChildren<Camera>();
+
         if (inputActions == null)
         {
             Debug.LogError("PlayerInput: Assign the InputSystem_Actions asset in the Inspector.", this);
@@ -181,6 +193,57 @@ public class PlayerInput : MonoBehaviour
 
     public bool IsCircuitDetailsPressed()
         => _circuitDetailsAction != null && _circuitDetailsAction.IsPressed();
+
+    public bool TryGetReticleTarget<T>(out T target) where T : class
+    {
+        RefreshReticleHits();
+        target = null;
+        float nearestDistance = float.MaxValue;
+
+        for (int i = 0; i < reticleHitCount; i++)
+        {
+            RaycastHit hit = reticleHits[i];
+            if (hit.collider == null || hit.distance >= nearestDistance)
+                continue;
+
+            reticleBehaviours.Clear();
+            hit.collider.GetComponentsInParent(false, reticleBehaviours);
+            for (int j = 0; j < reticleBehaviours.Count; j++)
+            {
+                if (reticleBehaviours[j] is not T candidate)
+                    continue;
+
+                target = candidate;
+                nearestDistance = hit.distance;
+                break;
+            }
+        }
+
+        return target != null;
+    }
+
+    private void RefreshReticleHits()
+    {
+        if (reticleRaycastFrame == Time.frameCount)
+            return;
+
+        reticleRaycastFrame = Time.frameCount;
+        if (gameplayInputBlocked)
+        {
+            reticleHitCount = 0;
+            return;
+        }
+
+        if (reticleCamera == null)
+            reticleCamera = Camera.main;
+
+        reticleHitCount = reticleCamera == null ? 0 : Physics.RaycastNonAlloc(
+            new Ray(reticleCamera.transform.position, reticleCamera.transform.forward),
+            reticleHits,
+            reticleRayLength,
+            ~0,
+            QueryTriggerInteraction.Ignore);
+    }
 
     public string GetCircuitDetailsBindingDisplayName()
     {

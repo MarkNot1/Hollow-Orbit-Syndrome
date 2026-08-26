@@ -27,8 +27,6 @@ public class InteractionInspectionController : MonoBehaviour
 
     [Header("Inspection")]
     [SerializeField]
-    private float fallbackRayLength = 5f;
-    [SerializeField]
     private float framingPadding = 0.72f;
     [SerializeField]
     private float minCameraDistance = 0.42f;
@@ -58,8 +56,8 @@ public class InteractionInspectionController : MonoBehaviour
     [SerializeField, Min(0f)]
     private float inspectionOrbitSmoothTime = 0.035f;
 
-    private readonly RaycastHit[] raycastHits = new RaycastHit[32];
     private IPlayerInteractable targetedInteractable;
+    private readonly RaycastHit[] exitRaycastHits = new RaycastHit[32];
     private IInspectableInteractable inspectedInteractable;
     private Transform inspectionAnchor;
     private Transform previousCameraFollow;
@@ -136,6 +134,7 @@ public class InteractionInspectionController : MonoBehaviour
 
         if (isInspecting)
             ExitInspection(false);
+
     }
 
     private void Update()
@@ -191,40 +190,17 @@ public class InteractionInspectionController : MonoBehaviour
 
     private IPlayerInteractable FindTargetedInteractable()
     {
-        if (mainCamera == null)
-            return null;
-
-        float rayLength = character != null ? character.interactionRayLength : fallbackRayLength;
-        Ray ray = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
-        int hitCount = Physics.RaycastNonAlloc(ray, raycastHits, rayLength, ~0, QueryTriggerInteraction.Ignore);
-        IPlayerInteractable bestInteractable = null;
-        float bestDistance = float.MaxValue;
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            RaycastHit hit = raycastHits[i];
-            if (hit.collider == null || hit.distance >= bestDistance)
-                continue;
-
-            IPlayerInteractable interactable = GetInteractableInParent(hit.collider);
-            if (interactable == null)
-                continue;
-
-            bestInteractable = interactable;
-            bestDistance = hit.distance;
-        }
-
-        return bestInteractable;
+        return playerInput != null && playerInput.TryGetReticleTarget(out IPlayerInteractable target)
+            ? target
+            : null;
     }
 
     private static IPlayerInteractable GetInteractableInParent(Collider collider)
     {
         MonoBehaviour[] behaviours = collider.GetComponentsInParent<MonoBehaviour>();
         for (int i = 0; i < behaviours.Length; i++)
-        {
             if (behaviours[i] is IPlayerInteractable interactable)
                 return interactable;
-        }
 
         return null;
     }
@@ -620,13 +596,13 @@ public class InteractionInspectionController : MonoBehaviour
     private bool TryFindExitGround(Vector3 rayOrigin, out RaycastHit groundHit)
     {
         groundHit = default;
-        int hitCount = Physics.RaycastNonAlloc(rayOrigin, Vector3.down, raycastHits, exitRayDistance, ~0, QueryTriggerInteraction.Ignore);
+        int hitCount = Physics.RaycastNonAlloc(rayOrigin, Vector3.down, exitRaycastHits, exitRayDistance, ~0, QueryTriggerInteraction.Ignore);
         float bestDistance = float.MaxValue;
         bool found = false;
 
         for (int i = 0; i < hitCount; i++)
         {
-            RaycastHit hit = raycastHits[i];
+            RaycastHit hit = exitRaycastHits[i];
             if (hit.collider == null || hit.distance >= bestDistance)
                 continue;
             if (hit.collider == playerCollider || GetInteractableInParent(hit.collider) != null)
