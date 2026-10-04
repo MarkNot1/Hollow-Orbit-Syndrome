@@ -215,7 +215,10 @@ public class ObjectPlacer : MonoBehaviour
             return;
 
         lastDetectedPosition = gridPosition;
-        bool placementValidity = CanPlace(gridPosition, selectedFootprint);
+        bool placementValidity = CanPlace(
+            gridPosition,
+            selectedFootprint,
+            preview.PreviewObject);
         preview.UpdatePosition(footprintCenter, placementValidity);
         AlignToFootprint(preview.PreviewObject, footprintCenter);
     }
@@ -231,7 +234,7 @@ public class ObjectPlacer : MonoBehaviour
                 selectedFootprint,
                 out Vector3Int gridPosition,
                 out Vector3 footprintCenter) ||
-            !CanPlace(gridPosition, selectedFootprint))
+            !CanPlace(gridPosition, selectedFootprint, preview?.PreviewObject))
             return false;
 
         GameObject instance = Instantiate(
@@ -261,8 +264,9 @@ public class ObjectPlacer : MonoBehaviour
             return false;
         }
 
+        if (wireSystem != null && !wireSystem.TryClaimOpenSlot(metadata))
+            wireSystem.TryInsertComponentIntoWire(metadata);
         ComponentPlaced?.Invoke(metadata);
-        wireSystem?.TryClaimOpenSlot(metadata);
 
         return true;
     }
@@ -481,11 +485,25 @@ public class ObjectPlacer : MonoBehaviour
     private Vector3 GetFootprintCenter(Vector3Int gridPosition, Vector2Int footprintSize)
         => activeBoard.GetFootprintCenter(gridPosition, footprintSize);
 
-    private bool CanPlace(Vector3Int gridPosition, Vector2Int footprintSize)
-        => activeGrid.CanPlace(gridPosition, footprintSize) &&
-            (wireSystem == null ||
-                wireSystem.IsFootprintClear(gridPosition, footprintSize) &&
-                !wireSystem.HasBlockingOpenSlot(gridPosition, footprintSize, out _));
+    private bool CanPlace(
+        Vector3Int gridPosition,
+        Vector2Int footprintSize,
+        GameObject candidate)
+    {
+        bool gridIsClear = activeGrid.CanPlace(gridPosition, footprintSize);
+        if (!gridIsClear || wireSystem == null)
+            return gridIsClear;
+
+        if (wireSystem.HasBlockingOpenSlot(gridPosition, footprintSize, out _))
+            return false;
+        if (wireSystem.IsFootprintClear(gridPosition, footprintSize))
+            return true;
+
+        return wireSystem.CanInsertComponentIntoWire(
+            gridPosition,
+            footprintSize,
+            candidate != null ? candidate.GetComponent<CircuitElement>() : null);
+    }
 
     private bool ScaleToFootprint(GameObject instance, Vector2Int footprintSize)
     {

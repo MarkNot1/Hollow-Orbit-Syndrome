@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public sealed class CircuitWireSystem : MonoBehaviour
@@ -12,6 +13,9 @@ public sealed class CircuitWireSystem : MonoBehaviour
 
     [SerializeField]
     private GameObject wirePrefab;
+
+    [SerializeField]
+    private GameObject openNodePrefab;
 
     [SerializeField]
     private Material wireMaterial;
@@ -224,6 +228,36 @@ public sealed class CircuitWireSystem : MonoBehaviour
         if (hoveredRemovalWire == wire)
             hoveredRemovalWire = null;
         RemoveWire(wire);
+        return true;
+    }
+
+    public bool CanInsertComponentIntoWire(
+        Vector3Int position,
+        Vector2Int size,
+        CircuitElement element)
+        => element != null && element.HasValidTerminals &&
+            FindInsertion(position, size, element.Terminal1, element.Terminal2).wire != null;
+
+    public bool TryInsertComponentIntoWire(PlacedCircuitComponent component)
+    {
+        if (component?.Element == null || !component.Element.HasValidTerminals)
+            return false;
+
+        var match = FindInsertion(
+            component.GridPosition,
+            component.FootprintSize,
+            component.Element.Terminal1,
+            component.Element.Terminal2);
+        if (match.wire == null)
+            return false;
+
+        CircuitNode start = match.wire.StartNode;
+        CircuitNode end = match.wire.EndNode;
+        List<Vector2Int> left = match.wire.RoutedCells.Take(match.before + 1).ToList();
+        List<Vector2Int> right = match.wire.RoutedCells.Skip(match.after).ToList();
+        RemoveWire(match.wire);
+        RestoreWire(start, match.entry, left);
+        RestoreWire(match.exit, end, right);
         return true;
     }
 
@@ -495,6 +529,51 @@ public sealed class CircuitWireSystem : MonoBehaviour
         return 0;
     }
 
+    private (WireConnection wire, int before, int after, CircuitNode entry, CircuitNode exit)
+        FindInsertion(
+        Vector3Int position,
+        Vector2Int size,
+        CircuitNode firstTerminal,
+        CircuitNode secondTerminal)
+    {
+        if (activeBoard?.Circuit == null || firstTerminal == null || secondTerminal == null ||
+            firstTerminal == secondTerminal ||
+            !wiresByCircuit.TryGetValue(activeBoard.Circuit, out List<WireConnection> wires))
+            return default;
+
+        List<WireConnection> matches = wires.Where(wire => wire != null &&
+            wire.RoutedCells.Any(cell =>
+                cell.x >= position.x && cell.x < position.x + size.x &&
+                cell.y >= position.y && cell.y < position.y + size.y)).ToList();
+        if (matches.Count != 1)
+            return default;
+
+        WireConnection match = matches[0];
+        if (!CircuitWireRouter.TryFindStraightPassThrough(
+                match.RoutedCells, position, size,
+                out int before, out int after, out Vector2Int wireDirection))
+            return default;
+
+        Vector3 worldDelta = secondTerminal.ConnectionPoint.position -
+            firstTerminal.ConnectionPoint.position;
+        Vector2 terminalAxis = new(
+            Vector3.Dot(worldDelta, activeBoard.GridRight) /
+                Mathf.Max(activeBoard.CellWorldWidth, 0.0001f),
+            Vector3.Dot(worldDelta, activeBoard.GridForward) /
+                Mathf.Max(activeBoard.CellWorldHeight, 0.0001f));
+        if (match == null || terminalAxis.sqrMagnitude < 0.0001f ||
+            Mathf.Abs(Vector2.Dot(terminalAxis.normalized, wireDirection)) < 0.95f)
+            return default;
+
+        Vector3 worldAxis = activeBoard.GridRight * wireDirection.x +
+            activeBoard.GridForward * wireDirection.y;
+        bool firstIsEntry = Vector3.Dot(firstTerminal.ConnectionPoint.position, worldAxis) <=
+            Vector3.Dot(secondTerminal.ConnectionPoint.position, worldAxis);
+        return (match, before, after,
+            firstIsEntry ? firstTerminal : secondTerminal,
+            firstIsEntry ? secondTerminal : firstTerminal);
+    }
+
     private bool TryGetEscapeCell(CircuitNode node, out Vector2Int escapeCell)
     {
         escapeCell = default;
@@ -595,6 +674,8 @@ public sealed class CircuitWireSystem : MonoBehaviour
         ConnectionCreated?.Invoke(wire);
         sourceNode.SlotOwner?.RefreshLabels();
         destination.SlotOwner?.RefreshLabels();
+        HideOpenNode(sourceNode);
+        HideOpenNode(destination);
 
         WireConnection preview = previewWire;
         previewWire = null;
@@ -765,13 +846,25 @@ public sealed class CircuitWireSystem : MonoBehaviour
 
     private CircuitNode CreateOpenNode(Transform parent, string nodeName, Vector3 boardLocalPosition)
     {
-        GameObject nodeObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        GameObject nodeObject = openNodePrefab != null
+            ? Instantiate(openNodePrefab, parent)
+            : GameObject.CreatePrimitive(PrimitiveType.Cube);
         nodeObject.name = $"Open Node {nodeName}";
         nodeObject.transform.SetParent(parent, false);
         nodeObject.transform.position = activeBoard.TileGrid.TransformPoint(boardLocalPosition);
         float scale = Mathf.Min(activeBoard.CellWorldWidth, activeBoard.CellWorldHeight) * 0.16f;
-        nodeObject.transform.localScale = Vector3.one * scale;
-        CircuitNode node = nodeObject.AddComponent<CircuitNode>();
+        Vector3 parentScale = parent.lossyScale;
+        nodeObject.transform.localScale = new Vector3(
+            scale / Mathf.Max(Mathf.Abs(parentScale.x), 0.0001f),
+            scale / Mathf.Max(Mathf.Abs(parentScale.y), 0.0001f),
+            scale / Mathf.Max(Mathf.Abs(parentScale.z), 0.0001f));
+        if (nodeObject.TryGetComponent(out BoxCollider hitbox))
+            hitbox.size = Vector3.one * 2.5f;
+        foreach (Renderer renderer in nodeObject.GetComponentsInChildren<Renderer>(true))
+            renderer.sharedMaterial = EnsureMaterial();
+
+        CircuitNode node = nodeObject.GetComponent<CircuitNode>() ??
+            nodeObject.AddComponent<CircuitNode>();
         node.SetTerminalId(nodeName);
         return node;
     }
@@ -787,11 +880,21 @@ public sealed class CircuitWireSystem : MonoBehaviour
             ? float.PositiveInfinity
             : (first.ConnectionPoint.position - second.ConnectionPoint.position).sqrMagnitude;
 
+    private static void HideOpenNode(CircuitNode node)
+    {
+        if (node?.SlotOwner == null)
+            return;
+        foreach (Renderer renderer in node.GetComponentsInChildren<Renderer>(true))
+            renderer.enabled = false;
+        foreach (Collider collider in node.GetComponentsInChildren<Collider>(true))
+            collider.enabled = false;
+    }
+
     private static bool IsSameHost(CircuitNode first, CircuitNode second)
     {
         if (first.Owner != null && first.Owner == second.Owner)
             return first.Owner.Element == null ||
                 first.Owner.Element.Kind != CircuitElementKind.Battery;
-        return first.SlotOwner != null && first.SlotOwner == second.SlotOwner;
+        return false;
     }
 }

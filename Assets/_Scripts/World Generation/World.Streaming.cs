@@ -257,7 +257,7 @@ public partial class World
                 RefreshDesiredSets();
             }
         }
-        if (IsCollisionColumnReady(
+        if (IsCollisionChunkReady(
                 WorldDataHelper.ChunkPositionFromVoxelCoords(this, voxel)))
             RecordCollisionSafePosition();
     }
@@ -289,7 +289,6 @@ public partial class World
 
         streamCenterVoxel = VoxelMetrics.WorldToVoxelCoord(streamingTarget.position);
         Vector3Int nextChunk = WorldDataHelper.ChunkPositionFromVoxelCoords(this, streamCenterVoxel);
-        nextChunk.y = 0;
         if (collisionMovementBlocked)
         {
             // The player may retreat or turn sideways before the abandoned
@@ -297,7 +296,7 @@ public partial class World
             // blocked direction; recenter on the chunk the player actually chose.
             if (nextChunk != blockedCollisionChunk)
                 collisionMovementBlocked = false;
-            else if (!IsCollisionColumnReady(blockedCollisionChunk))
+            else if (!IsCollisionChunkReady(blockedCollisionChunk))
                 return;
             else
             {
@@ -306,7 +305,6 @@ public partial class World
                 collisionMovementBlocked = false;
                 streamCenterVoxel = VoxelMetrics.WorldToVoxelCoord(streamingTarget.position);
                 nextChunk = WorldDataHelper.ChunkPositionFromVoxelCoords(this, streamCenterVoxel);
-                nextChunk.y = 0;
             }
         }
 
@@ -347,9 +345,27 @@ public partial class World
                 desiredData.Add(new Vector3Int(centerX + x * chunkSize, surfaceY, centerZ + z * chunkSize));
         }
 
-        // Terrain surfaces belong to y=0. Baking the solid chunk below created
-        // a false "ready" collider one chunk under the player and exposed its
-        // bottom as the black rectangle visible from beneath the map.
+        int lowestUndergroundY = Mathf.Min(-chunkHeight, streamCenterChunk.y - chunkHeight);
+        for (int y = -chunkHeight; y >= lowestUndergroundY; y -= chunkHeight)
+        {
+            for (int x = -2; x <= 2; x++)
+            {
+                for (int z = -2; z <= 2; z++)
+                    desiredData.Add(new Vector3Int(centerX + x * chunkSize, y, centerZ + z * chunkSize));
+            }
+
+            for (int x = -1; x <= 1; x++)
+            {
+                for (int z = -1; z <= 1; z++)
+                {
+                    Vector3Int underground = new Vector3Int(
+                        centerX + x * chunkSize, y, centerZ + z * chunkSize);
+                    desiredRender.Add(underground);
+                    desiredCollision.Add(underground);
+                }
+            }
+        }
+
         for (int x = -1; x <= 1; x++)
         {
             for (int z = -1; z <= 1; z++)
@@ -562,13 +578,17 @@ public partial class World
         if (!worldData.chunkDataDictionary.TryGetValue(position, out ChunkData center))
             return null;
         var neighborhood = new Dictionary<Vector3Int, ChunkData>();
-        for (int x = -1; x <= 1; x++)
+        for (int y = -1; y <= 1; y++)
         {
-            for (int z = -1; z <= 1; z++)
+            for (int x = -1; x <= 1; x++)
             {
-                Vector3Int key = position + new Vector3Int(x * chunkSize, 0, z * chunkSize);
-                if (worldData.chunkDataDictionary.TryGetValue(key, out ChunkData data))
-                    neighborhood.Add(key, data);
+                for (int z = -1; z <= 1; z++)
+                {
+                    Vector3Int key = position + new Vector3Int(
+                        x * chunkSize, y * chunkHeight, z * chunkSize);
+                    if (worldData.chunkDataDictionary.TryGetValue(key, out ChunkData data))
+                        neighborhood.Add(key, data);
+                }
             }
         }
 
@@ -801,9 +821,10 @@ public partial class World
         }
     }
 
-    private bool IsCollisionColumnReady(Vector3Int chunkPosition)
+    private bool IsCollisionChunkReady(Vector3Int chunkPosition)
     {
-        return IsActiveCollisionCurrent(new Vector3Int(chunkPosition.x, 0, chunkPosition.z));
+        return worldData.chunkDictionary.TryGetValue(chunkPosition, out ChunkRenderer renderer) &&
+               (renderer.IsCollisionActive || IsCollisionBuildCurrent(chunkPosition));
     }
 
     private bool IsActiveCollisionCurrent(Vector3Int position)
@@ -846,10 +867,9 @@ public partial class World
 
         Vector3Int voxel = VoxelMetrics.WorldToVoxelCoord(streamingTarget.position);
         Vector3Int currentChunk = WorldDataHelper.ChunkPositionFromVoxelCoords(this, voxel);
-        if (IsCollisionColumnReady(currentChunk))
+        if (IsCollisionChunkReady(currentChunk))
         {
-            Vector3Int readyChunk = new Vector3Int(currentChunk.x, 0, currentChunk.z);
-            if (collisionMovementBlocked && readyChunk == blockedCollisionChunk &&
+            if (collisionMovementBlocked && currentChunk == blockedCollisionChunk &&
                 !TryRecoverBlockedTargetAboveSurface())
                 return;
             collisionMovementBlocked = false;
@@ -857,10 +877,9 @@ public partial class World
             return;
         }
 
-        // A missing collider must never turn into a fall. Rebuild the surface
-        // owner at highest priority and hold the player at the last safe height.
+        // A missing collider must never turn into a fall. Rebuild its chunk at
+        // highest priority and hold the player at the last safe height.
         Vector3Int requestedCollisionChunk = currentChunk;
-        requestedCollisionChunk.y = 0;
         if (!collisionMovementBlocked || blockedCollisionChunk != requestedCollisionChunk)
         {
             collisionMovementBlocked = true;
@@ -899,7 +918,7 @@ public partial class World
         float scale = VoxelMetrics.Size;
         Vector3 origin = new Vector3(
             blockedTargetPosition.x,
-            (chunkHeight + 4) * scale,
+            (blockedCollisionChunk.y + chunkHeight + 4) * scale,
             blockedTargetPosition.z);
         int hitCount = Physics.RaycastNonAlloc(
             origin,
@@ -953,7 +972,7 @@ public partial class World
             return;
         // Do not release the old 3x3 until every replacement surface chunk has
         // either activated its collider or resolved as empty.
-        if (!AreDesiredCollisionColumnsReady())
+        if (!AreDesiredCollisionChunksReady())
             return;
 
         var released = new List<Vector3Int>();
@@ -976,27 +995,19 @@ public partial class World
         PruneUnneededChunksAndData();
     }
 
-    private bool AreDesiredCollisionColumnsReady()
+    private bool AreDesiredCollisionChunksReady()
     {
-        for (int x = -1; x <= 1; x++)
+        foreach (Vector3Int position in desiredCollision)
         {
-            for (int z = -1; z <= 1; z++)
-            {
-                Vector3Int column = new Vector3Int(
-                    streamCenterChunk.x + x * chunkSize,
-                    0,
-                    streamCenterChunk.z + z * chunkSize);
-                if (!IsCollisionColumnResolved(column))
-                    return false;
-            }
+            if (!IsCollisionChunkResolved(position))
+                return false;
         }
         return true;
     }
 
-    private bool IsCollisionColumnResolved(Vector3Int chunkPosition)
+    private bool IsCollisionChunkResolved(Vector3Int chunkPosition)
     {
-        Vector3Int key = new Vector3Int(chunkPosition.x, 0, chunkPosition.z);
-        return IsActiveCollisionCurrent(key) || IsCollisionBuildCurrent(key);
+        return IsActiveCollisionCurrent(chunkPosition) || IsCollisionBuildCurrent(chunkPosition);
     }
 
     private void TryCompleteBootstrap()
@@ -1110,8 +1121,9 @@ public partial class World
     {
         int dx = Mathf.Abs(position.x - streamCenterChunk.x) / Mathf.Max(1, chunkSize);
         int dz = Mathf.Abs(position.z - streamCenterChunk.z) / Mathf.Max(1, chunkSize);
+        int dy = Mathf.Abs(position.y - streamCenterChunk.y) / Mathf.Max(1, chunkHeight);
         int ring = Mathf.Max(dx, dz);
-        return (collision ? -10000 : 0) + ring * 100 + phase;
+        return (collision ? -10000 : 0) + ring * 100 + dy * 10 + phase;
     }
 
     private void ProcessWorkerErrors()
@@ -1132,7 +1144,9 @@ public partial class World
             Vector3Int.left * chunkSize,
             Vector3Int.right * chunkSize,
             Vector3Int.back * chunkSize,
-            Vector3Int.forward * chunkSize
+            Vector3Int.forward * chunkSize,
+            Vector3Int.down * chunkHeight,
+            Vector3Int.up * chunkHeight
         };
         foreach (Vector3Int offset in offsets)
         {

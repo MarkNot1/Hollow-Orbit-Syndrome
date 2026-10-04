@@ -28,8 +28,8 @@ public sealed class RemovingState : IPlacementState
 
     public void HandlePrimaryAction()
     {
-        if (wireSystem == null || !wireSystem.TryRemoveSelectedWire(inputManager))
-            objectPlacer.TryRemoveSelectedComponent(inputManager);
+        if (!objectPlacer.TryRemoveSelectedComponent(inputManager))
+            wireSystem?.TryRemoveSelectedWire(inputManager);
     }
 
     public void Exit()

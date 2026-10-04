@@ -23,7 +23,11 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
     [SerializeField]
     private TextMeshProUGUI popupText;
 
+    [SerializeField]
+    private Inventory inventory;
+
     private PlacedCircuitComponent displayedComponent;
+    private ItemSO displayedInventoryItem;
     private bool displayedExpanded;
     private bool contentDirty = true;
 
@@ -37,6 +41,13 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
         if (inputManager == null || canvas == null || popup == null || popupText == null)
             Debug.LogError("Circuit hover display references are incomplete.", this);
 
+        if (inventory == null)
+            inventory = FindFirstObjectByType<Inventory>();
+
+        // The inventory is a sibling under the same canvas and normally renders after
+        // the readout. Keep the readout above it when it is allowed to show.
+        popup.SetAsLastSibling();
+
         SetVisible(false);
     }
 
@@ -45,6 +56,7 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
         if (simulationSystem != null)
             simulationSystem.SimulationUpdated -= HandleSimulationUpdated;
         displayedComponent = null;
+        displayedInventoryItem = null;
         contentDirty = true;
         SetVisible(false);
     }
@@ -52,25 +64,37 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
     private void Update()
     {
         if (inputManager == null || simulationSystem == null || canvas == null || popup == null || popupText == null ||
-            inputManager.IsPointerOverUI() ||
-            !inputManager.TryGetCircuitComponentBody(out PlacedCircuitComponent component) ||
-            component?.Element == null)
+            (inputManager.IsPointerOverUI() && !IsInventoryOpen()) ||
+            !TryGetDisplayTarget(out PlacedCircuitComponent component, out ItemSO inventoryItem, out CircuitElement inventoryElement))
         {
             SetVisible(false);
             return;
         }
 
         bool expanded = IsDetailsPressed();
-        if (component != displayedComponent || expanded != displayedExpanded || contentDirty)
+        if (inventoryItem != null)
+        {
+            if (inventoryItem != displayedInventoryItem || expanded != displayedExpanded || contentDirty)
+            {
+                displayedComponent = null;
+                displayedInventoryItem = inventoryItem;
+                displayedExpanded = expanded;
+                contentDirty = false;
+                UpdateInventoryContent(inventoryItem, inventoryElement, expanded);
+            }
+        }
+        else if (component != displayedComponent || displayedInventoryItem != null ||
+                 expanded != displayedExpanded || contentDirty)
         {
             displayedComponent = component;
+            displayedInventoryItem = null;
             displayedExpanded = expanded;
             contentDirty = false;
             UpdateContent(component, expanded);
         }
 
         float popupHeight = expanded ? ExpandedHeight : CompactHeight;
-        if (expanded && component.Element.State == CircuitComponentState.Broken)
+        if (inventoryItem == null && expanded && component.Element.State == CircuitComponentState.Broken)
             popupHeight += 24f;
         popup.sizeDelta = new Vector2(PopupWidth, popupHeight);
         PositionPopup(Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero);
@@ -127,6 +151,67 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
         }
     }
 
+    private void UpdateInventoryContent(ItemSO item, CircuitElement element, bool expanded)
+    {
+        string title = string.IsNullOrWhiteSpace(item.itemName) ? element.Kind.ToString() : item.itemName;
+        string valueLabel = element.Kind switch
+        {
+            CircuitElementKind.Battery => "Voltage",
+            CircuitElementKind.Capacitor => "Capacitance",
+            _ => "Value"
+        };
+        string value = element.Kind == CircuitElementKind.Capacitor
+            ? FormatCapacitance(element.Value)
+            : element.Kind == CircuitElementKind.Battery
+                ? FormatVoltage(element.Value)
+                : FormatResistance(element.Value);
+
+        popupText.text = $"<b>{title}</b>  [{element.Kind}]\n" +
+            $"{valueLabel}: {value}\n" +
+            (expanded
+                ? $"Max voltage: {FormatRating(element.MaximumVoltage, "V")}\n" +
+                  $"Max current: {FormatRating(element.MaximumCurrent, "A")}\n" +
+                  $"Max power: {FormatRating(element.MaximumPower, "W")}"
+                : "<color=#AAB6C8>Hold CTRL to expand</color>");
+    }
+
+    private bool TryGetDisplayTarget(
+        out PlacedCircuitComponent component,
+        out ItemSO inventoryItem,
+        out CircuitElement inventoryElement)
+    {
+        component = null;
+        inventoryItem = null;
+        inventoryElement = null;
+
+        if (IsInventoryOpen() && inventory != null &&
+            inventory.TryGetHoveredCircuitComponent(out inventoryItem, out inventoryElement))
+            return true;
+
+        if (!inputManager.TryGetCircuitComponentBody(out component) || component?.Element == null)
+            return false;
+
+        return true;
+    }
+
+    private static string FormatRating(double value, string unit)
+        => value > 0d ? $"{value:0.###} {unit}" : "--";
+
+    private static string FormatCapacitance(double value)
+    {
+        double magnitude = System.Math.Abs(value);
+        if (magnitude >= 1e-3d)
+            return $"{value * 1e3d:0.###} mF";
+        if (magnitude >= 1e-6d)
+            return $"{value * 1e6d:0.###} uF";
+        if (magnitude >= 1e-9d)
+            return $"{value * 1e9d:0.###} nF";
+        return $"{value * 1e12d:0.###} pF";
+    }
+
+    private static string FormatResistance(double value)
+        => $"{value:0.###} ohm";
+
     private void PositionPopup(Vector2 screenPosition)
     {
         RectTransform canvasRect = canvas.transform as RectTransform;
@@ -165,6 +250,9 @@ public sealed class CircuitComponentHoverDisplay : MonoBehaviour
         return Keyboard.current != null &&
             (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed);
     }
+
+    private bool IsInventoryOpen()
+        => inventory != null && inventory.IsOpen;
 
     private void HandleSimulationUpdated(CircuitSimulationResult _)
         => contentDirty = true;

@@ -45,22 +45,22 @@ public sealed class ChunkMeshContext
         if ((uint)localX < (uint)size && (uint)localY < (uint)height && (uint)localZ < (uint)size)
             return Center.voxels[localX + size * localY + size * height * localZ];
 
-        // Generated height-map terrain continues below y=0. Reuse the bottom
-        // cell of the addressed surface column so no hidden underside mesh or
-        // fake lower collision chunk is needed.
-        if (localY < 0 && Center.worldPosition.y == 0)
+        // Distant surface chunks omit underground data; keep their underside
+        // closed. Nearby chunks use the real vertical neighbor below.
+        if (localY < 0 && Center.worldPosition.y <= 0)
         {
             int belowOffsetX = FloorDiv(localX, size);
             int belowOffsetZ = FloorDiv(localZ, size);
-            Vector3Int surfaceKey = Center.worldPosition + new Vector3Int(
+            Vector3Int columnKey = Center.worldPosition + new Vector3Int(
                 belowOffsetX * size, 0, belowOffsetZ * size);
-            if (chunks.TryGetValue(surfaceKey, out ChunkData surface))
+            Vector3Int belowKey = columnKey + Vector3Int.down * height;
+            if (!chunks.ContainsKey(belowKey) && chunks.TryGetValue(columnKey, out ChunkData column))
             {
                 int surfaceX = localX - belowOffsetX * size;
                 int surfaceZ = localZ - belowOffsetZ * size;
-                if ((uint)surfaceX < (uint)surface.chunkSize &&
-                    (uint)surfaceZ < (uint)surface.chunkSize)
-                    return surface.voxels[surfaceX + surface.chunkSize * surface.chunkHeight * surfaceZ];
+                if ((uint)surfaceX < (uint)column.chunkSize &&
+                    (uint)surfaceZ < (uint)column.chunkSize)
+                    return column.voxels[surfaceX + column.chunkSize * column.chunkHeight * surfaceZ];
             }
         }
 

@@ -71,6 +71,21 @@ public sealed class CircuitPlacementTests
     }
 
     [Test]
+    public void InlineWireRequiresStraightCardinalPassThrough()
+    {
+        static bool Matches(params Vector2Int[] route)
+        {
+            return CircuitWireRouter.TryFindStraightPassThrough(
+                route, new Vector3Int(2, 2, 0), Vector2Int.one, out _, out _, out _);
+        }
+
+        Assert.That(Matches(new(1, 2), new(2, 2), new(3, 2)), Is.True);
+        Assert.That(Matches(new(1, 2), new(2, 2), new(2, 3)), Is.False);
+        Assert.That(Matches(new(1, 1), new(2, 2), new(3, 3)), Is.False);
+        Assert.That(Matches(new(1, 2), new(2, 2)), Is.False);
+    }
+
+    [Test]
     public void CircuitBoundsStayAnchoredToTileGrid()
     {
         GameObject circuitObject = new("Circuit Bounds Test");

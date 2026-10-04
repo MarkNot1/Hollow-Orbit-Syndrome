@@ -130,6 +130,45 @@ public static class CircuitWireRouter
         return result;
     }
 
+    public static bool TryFindStraightPassThrough(
+        IReadOnlyList<Vector2Int> path,
+        Vector3Int position,
+        Vector2Int size,
+        out int before,
+        out int after,
+        out Vector2Int direction)
+    {
+        before = after = -1;
+        direction = Vector2Int.zero;
+        if (path == null)
+            return false;
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            Vector2Int cell = path[i];
+            bool inside = cell.x >= position.x && cell.x < position.x + size.x &&
+                cell.y >= position.y && cell.y < position.y + size.y;
+            if (inside && after >= 0)
+                return false;
+            if (inside && before < 0)
+            {
+                if (i == 0)
+                    return false;
+                before = i - 1;
+                direction = path[i] - path[i - 1];
+            }
+            else if (!inside && before >= 0 && after < 0)
+                after = i;
+        }
+
+        if (after < 0 || Mathf.Abs(direction.x) + Mathf.Abs(direction.y) != 1)
+            return false;
+        for (int i = before + 1; i <= after; i++)
+            if (path[i] - path[i - 1] != direction)
+                return false;
+        return true;
+    }
+
     private static int Heuristic(Vector2Int from, Vector2Int to)
     {
         int dx = Mathf.Abs(to.x - from.x);
