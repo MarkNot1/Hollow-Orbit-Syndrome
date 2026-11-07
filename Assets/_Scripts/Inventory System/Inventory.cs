@@ -126,7 +126,11 @@ public class Inventory : MonoBehaviour
         playerInput?.SetGameplayInputBlocked(open);
         Cursor.lockState = open ? CursorLockMode.None : CursorLockMode.Locked;
         Cursor.visible = open;
-        if (open) menu?.ShowTab(0);
+        if (open)
+        {
+            Canvas.ForceUpdateCanvases();
+            menu?.Refresh();
+        }
         else SetLookedAtRenderer(null);
     }
 
@@ -209,7 +213,6 @@ public class Inventory : MonoBehaviour
     {
         Keyboard keyboard = Keyboard.current;
         if (keyboard == null) return;
-        if (isOpen && menu != null && !menu.InventoryTabSelected) return;
         // Digit keys are contiguous in the Input System's Key enum.
         for (int i = 0; i < hotbarItems.Length; i++)
             if (keyboard[(Key)((int)Key.Digit1 + i)].wasPressedThisFrame)

@@ -164,12 +164,11 @@ public sealed class InventoryTests
     }
 
     [Test]
-    public void SceneTabsRowsSelectionAndHoverUseTheExistingAssets()
+    public void SceneRowsSelectionAndHoverUseTheExistingAssets()
     {
         Inventory inventory = OpenScene(out InventoryMenu menu, out _);
-        GameObject[] panels = Get<GameObject[]>(menu, "panels");
-        Button[] tabs = Get<Button[]>(menu, "tabs");
-        Assert.That(panels.Length, Is.EqualTo(3));
+        Assert.That(inventory.container.GetComponentsInChildren<Button>(true).Length, Is.EqualTo(2));
+        Assert.That(Get<TextMeshProUGUI>(menu, "itemTitle").text, Is.Empty);
         Assert.That(Get<GameObject>(menu, "emptyMessage").activeSelf, Is.True);
         Assert.That(Get<Button>(menu, "equipButton").interactable, Is.False);
         inventory.AddItem(inventory.Resistor, 3);
@@ -188,13 +187,6 @@ public sealed class InventoryTests
         Assert.That(inventory.TryGetHoveredCircuitComponent(out ItemSO item, out CircuitElement element), Is.True);
         Assert.That(item, Is.SameAs(inventory.Resistor));
         Assert.That(element, Is.Not.Null);
-        tabs[1].onClick.Invoke();
-        Assert.That(panels.Select(p => p.activeSelf), Is.EqualTo(new[] { false, true, false }));
-        Assert.That(menu.HoveredItem, Is.Null);
-        tabs[2].onClick.Invoke();
-        Assert.That(panels.Select(p => p.activeSelf), Is.EqualTo(new[] { false, false, true }));
-        tabs[0].onClick.Invoke();
-        Assert.That(panels.Select(p => p.activeSelf), Is.EqualTo(new[] { true, false, false }));
         inventory.SetOpen(false);
         Assert.That(inventory.container.activeSelf, Is.False);
         Assert.That(inventory.TryGetHoveredCircuitComponent(out _, out _), Is.False);
