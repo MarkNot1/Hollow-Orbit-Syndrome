@@ -88,8 +88,17 @@ public class Character : MonoBehaviour
 
     private void TryDeleteTargetVoxel()
     {
-        if (world != null && playerInput.TryGetReticleHit(out RaycastHit hit) &&
-            hit.collider.GetComponent<ChunkRenderer>() != null)
+        if (!playerInput.TryGetReticleHit(out RaycastHit hit)) return;
+        StructureAttachment attachment = hit.collider.GetComponentInParent<StructureAttachment>();
+        if (attachment != null)
+        {
+            attachment.GetComponentInParent<VoxelStructure>()?.RemoveAttachment(attachment);
+            return;
+        }
+        VoxelStructure structure = hit.collider.GetComponent<StructureChunk>()?.Structure;
+        if (structure != null && structure.TryGetHitCell(hit, out var surface, out _))
+            structure.SetVoxel(surface, VoxelType.Air);
+        else if (world != null && hit.collider.GetComponent<ChunkRenderer>() != null)
             world.SetVoxel(hit, VoxelType.Air);
     }
 

@@ -122,6 +122,24 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "SaveStructures",
+                    "type": "Button",
+                    "id": "1f367001-4cd7-4775-88e1-256d74d042e2",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "LoadStructures",
+                    "type": "Button",
+                    "id": "c97e3e4e-dd25-49ab-b391-54a72e6b9c55",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -562,6 +580,28 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "PlaceVoxel",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8ef7deb5-c595-46d8-801a-5d7d29523153",
+                    "path": "<Keyboard>/f5",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "SaveStructures",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "9b3158d3-e560-4219-98df-cb906f65e68b",
+                    "path": "<Keyboard>/f9",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "LoadStructures",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

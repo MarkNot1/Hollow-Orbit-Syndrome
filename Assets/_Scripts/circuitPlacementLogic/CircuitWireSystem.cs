@@ -92,6 +92,13 @@ public sealed class CircuitWireSystem : MonoBehaviour
         activeGrid = null;
     }
 
+    public void ForgetCircuit(SpecialPrefabInteractable circuit)
+    {
+        if (activeBoard?.Circuit == circuit) ClearActiveBoard();
+        wiresByCircuit.Remove(circuit);
+        wireCellsByCircuit.Remove(circuit);
+    }
+
     public bool TryGetNode(placementInputManager inputManager, out CircuitNode node)
     {
         node = null;

@@ -22,4 +22,5 @@ MonoBehaviour:
   placementKind: 2
   voxelType: 0
   specialPrefabId: Circuit
+  structureBlueprint: {fileID: 0}
   unlimited: 1

@@ -3460,6 +3460,53 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 2807604470582111331, guid: 5533917c6ba9b1d4fb8e7f2c5057b4c3, type: 3}
   m_PrefabInstance: {fileID: 1446941803}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1539610450
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1539610452}
+  - component: {fileID: 1539610451}
+  m_Layer: 0
+  m_Name: Structures
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1539610451
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1539610450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbb07d48e0251e246aba34d8dbcc25cd, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::StructureSystem
+  voxelMaterial: {fileID: 2100000, guid: 5c8ce8693fa1bc440b87b6842e043e5b, type: 2}
+  prefabDatabase: {fileID: 11400000, guid: e6f15b4c54194295830ca31a88f51687, type: 2}
+  framePreviewMaterial: {fileID: 2100000, guid: ba748057139c53f49a045637cb9fdb53, type: 2}
+--- !u!4 &1539610452
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1539610450}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1565985015
 GameObject:
   m_ObjectHideFlags: 0
@@ -3892,13 +3939,21 @@ MonoBehaviour:
     amount: 1
   - item: {fileID: 11400000, guid: 30b0575cfba392f44a7957995aa2fc6c, type: 2}
     amount: 1
+  - item: {fileID: 11400000, guid: a5adffa4d2d676d469a35663382b86c1, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: 1a0ba3ca5d163714b86dc1cab63e9c30, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: df55b22a1cca8fb49bbb668a53a7e1c8, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: 77b83e619fdffb44f8a68b06d37fcb76, type: 2}
+    amount: 1
   hotbarItems:
   - {fileID: 11400000, guid: 00661ddeecf027449b24bd81460e72a0, type: 2}
   - {fileID: 11400000, guid: 613fae7ac42e8f449a8cdfe03cd0aebe, type: 2}
   - {fileID: 11400000, guid: 00f075ca9f1801647a47ccd95c789384, type: 2}
   - {fileID: 11400000, guid: 218d1580a8e11a146a80db542151681d, type: 2}
   - {fileID: 11400000, guid: 30b0575cfba392f44a7957995aa2fc6c, type: 2}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: 1a0ba3ca5d163714b86dc1cab63e9c30, type: 2}
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   hotbarObj: {fileID: 865684510}
   container: {fileID: 1713706520}
@@ -4919,7 +4974,7 @@ MonoBehaviour:
   m_text: 'TAB / ESC  Close     1-6  Assign     ENTER  Equip     Q  Drop
 
     Playing:
-    Wheel / 1-6  Select     RMB  Place voxel     LMB  Break voxel'
+    RMB  Place     LMB  Remove     F5  Save structures     F9  Load'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -6572,3 +6627,4 @@ SceneRoots:
   - {fileID: 1170934093}
   - {fileID: 1059906584}
   - {fileID: 1139760716}
+  - {fileID: 1539610452}

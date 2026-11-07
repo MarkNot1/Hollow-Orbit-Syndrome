@@ -66,7 +66,7 @@ public sealed class VoxelInventoryTests
         objects.Add(item);
         item.unlimited = unlimited;
         item.placementKind = ItemPlacementKind.TerrainVoxel;
-        item.voxelType = VoxelType.Rock;
+        item.voxelType = VoxelType.Dark_Ship_Metal;
         return item;
     }
 
@@ -238,7 +238,7 @@ public sealed class VoxelInventoryTests
         Vector3Int key = WorldDataHelper.ChunkPositionFromVoxelCoords(world, surface);
         data = new ChunkData(4, 4, world, key);
         world.worldData.chunkDataDictionary[key] = data;
-        Chunk.SetVoxel(data, surface - key, VoxelType.Rock);
+        Chunk.SetVoxel(data, surface - key, VoxelType.Dark_Ship_Metal);
         GameObject chunkObject = NewObject("Placement surface");
         ChunkRenderer renderer = chunkObject.AddComponent<ChunkRenderer>();
         renderer.InitializeChunk(data);
@@ -250,10 +250,12 @@ public sealed class VoxelInventoryTests
         return world;
     }
 
-    [TestCase(VoxelType.Rock)]
+    [TestCase(VoxelType.Dark_Ship_Metal)]
     [TestCase(VoxelType.Infected_Growth)]
     [TestCase(VoxelType.Ship_Metal)]
     [TestCase(VoxelType.Metal)]
+    [TestCase(VoxelType.Striped_Ship_Metal)]
+    [TestCase(VoxelType.Window)]
     public void PlacementWritesSelectedTypeAndRejectsRepeatedPlacementBeforeRemeshing(VoxelType type)
     {
         Vector3Int surface = new(2000, 2000, 2000);
@@ -297,8 +299,8 @@ public sealed class VoxelInventoryTests
         camera.transform.position = (Vector3)surface * VoxelMetrics.Size + Vector3.up * 14.9f;
         camera.transform.rotation = Quaternion.LookRotation(Vector3.down, Vector3.forward);
         Inventory inventory = NewInventory();
-        ItemSO rock = NewItem(), metal = NewItem(); metal.voxelType = VoxelType.Metal;
-        inventory.AddItem(rock, 1); inventory.AddItem(metal, 1);
+        ItemSO darkMetal = NewItem(), metal = NewItem(); metal.voxelType = VoxelType.Metal;
+        inventory.AddItem(darkMetal, 1); inventory.AddItem(metal, 1);
         PlayerPlacementController placement = input.gameObject.AddComponent<PlayerPlacementController>();
         Set(placement, "world", world); Set(placement, "inventory", inventory); Call(placement, "Awake");
         inventory.SelectHotbar(1);
@@ -312,9 +314,9 @@ public sealed class VoxelInventoryTests
         camera.transform.position -= Vector3.up;
         inventory.SelectHotbar(5);
         Assert.That(placement.TryPlaceEquippedVoxel(), Is.False);
-        inventory.SelectHotbar(0); rock.placementKind = ItemPlacementKind.None;
+        inventory.SelectHotbar(0); darkMetal.placementKind = ItemPlacementKind.None;
         Assert.That(placement.TryPlaceEquippedVoxel(), Is.False);
-        rock.placementKind = ItemPlacementKind.TerrainVoxel;
+        darkMetal.placementKind = ItemPlacementKind.TerrainVoxel;
         input.SetGameplayInputBlocked(true);
         Assert.That(placement.TryPlaceEquippedVoxel(), Is.False);
     }
@@ -356,7 +358,7 @@ public sealed class VoxelInventoryTests
         Character character = input.gameObject.AddComponent<Character>();
         Set(character, "playerInput", input); character.world = world;
         Call(character, "TryDeleteTargetVoxel");
-        Assert.That(data.voxels[0], Is.EqualTo(VoxelType.Rock));
+        Assert.That(data.voxels[0], Is.EqualTo(VoxelType.Dark_Ship_Metal));
         camera.transform.position -= Vector3.up * 0.1f;
         Call(character, "TryDeleteTargetVoxel");
         Assert.That(data.voxels[0], Is.EqualTo(VoxelType.Air));
@@ -364,16 +366,17 @@ public sealed class VoxelInventoryTests
     }
 
     [Test]
-    public void ScenePaletteContainsFiveTexturedVisualOnlyItemsAndFifteenUnitPlayer()
+    public void ScenePaletteContainsFrameAndStripedItemsWithSixHotbarSlotsAndFifteenUnitReach()
     {
         Scene preview = EditorSceneManager.OpenPreviewScene("Assets/Scenes/SampleScene.unity");
         try
         {
             Inventory inventory = preview.GetRootGameObjects().SelectMany(go => go.GetComponentsInChildren<Inventory>(true)).Single();
-            Assert.That(inventory.Items.Take(5).Select(e => e.Item.itemName), Is.EqualTo(new[] { "Rock", "Infected Growth", "Ship Metal", "Metal", "Circuit" }));
-            for (int i = 0; i < 5; i++)
+            Assert.That(inventory.Items.Take(5).Select(e => e.Item.itemName), Is.EqualTo(new[] { "Dark Ship Metal", "Infected Growth", "Ship Metal", "Metal", "Circuit" }));
+            ItemSO[] palette = inventory.Items.Select(e => e.Item).Where(item => item.placementKind != ItemPlacementKind.None).ToArray();
+            Assert.That(palette.Length, Is.EqualTo(9));
+            foreach (ItemSO item in palette)
             {
-                ItemSO item = inventory.Items[i].Item;
                 Assert.That(item.unlimited, Is.True);
                 Assert.That(item.itemIcon, Is.Not.Null);
                 Assert.That(item.itemIcon.rect.size, Is.EqualTo(new Vector2(128, 128)));
@@ -383,9 +386,14 @@ public sealed class VoxelInventoryTests
                 Assert.That(icon.GetPixels().Any(pixel => pixel.a > 0.9f), Is.True);
                 Assert.That(item.handItemPrefab.GetComponentsInChildren<Collider>(true), Is.Empty);
                 Assert.That(item.handItemPrefab.GetComponentsInChildren<MonoBehaviour>(true), Is.Empty);
-                Assert.That(Get<ItemSO[]>(inventory, "hotbarItems")[i], Is.SameAs(item));
             }
-            Assert.That(Get<ItemSO[]>(inventory, "hotbarItems")[5], Is.Null);
+            for (int i = 0; i < 5; i++)
+                Assert.That(Get<ItemSO[]>(inventory, "hotbarItems")[i], Is.SameAs(inventory.Items[i].Item));
+            Assert.That(Get<ItemSO[]>(inventory, "hotbarItems")[5].placementKind, Is.EqualTo(ItemPlacementKind.StructureBlueprint));
+            Assert.That(Get<ItemSO[]>(inventory, "hotbarItems")[5].itemName, Is.EqualTo("Master Frame"));
+            Assert.That(Get<ItemSO[]>(inventory, "hotbarItems")[5].structureBlueprint, Is.Not.Null);
+            Assert.That(palette.Any(item => item.itemName == "Metal Frame"), Is.True);
+            Assert.That(palette.Any(item => item.voxelType == VoxelType.Striped_Ship_Metal), Is.True);
             GameObject player = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Prefabs/Player.prefab");
             Assert.That(player.GetComponent<PlayerInput>().InteractionReach, Is.EqualTo(15f));
         }
@@ -397,14 +405,67 @@ public sealed class VoxelInventoryTests
     {
         VoxelDataSO source = ScriptableObject.CreateInstance<VoxelDataSO>(); objects.Add(source);
         source.textureSizeX = source.textureSizeY = 1f / 16f;
-        source.textureDataList = new List<TextureData> { new() { voxelType = VoxelType.Rock,
+        source.textureDataList = new List<TextureData> { new() { voxelType = VoxelType.Dark_Ship_Metal,
             up = new Vector2Int(1, 2), down = new Vector2Int(3, 4), side = new Vector2Int(5, 6) } };
-        Mesh cube = VoxelPaletteEditor.BuildCube(source, VoxelType.Rock); objects.Add(cube);
+        Mesh cube = VoxelPaletteEditor.BuildCube(source, VoxelType.Dark_Ship_Metal); objects.Add(cube);
         Assert.That(cube.vertexCount, Is.EqualTo(24));
         Assert.That(cube.uv[0].x, Is.EqualTo(1f / 16f + VoxelDataManager.textureOffset).Within(0.00001f));
         Assert.That(cube.uv[4].x, Is.EqualTo(3f / 16f + VoxelDataManager.textureOffset).Within(0.00001f));
         Assert.That(cube.uv[8].x, Is.EqualTo(5f / 16f + VoxelDataManager.textureOffset).Within(0.00001f));
         Assert.That(VoxelMetrics.FaceNormal(new Vector3(0.7f, 0.8f, 0f)), Is.EqualTo(Vector3Int.up));
+    }
+
+    [Test]
+    public void FramePreviewHidesForInventoryInspectionEmptySlotsAndMissingTargets()
+    {
+        StructureSystem structures = NewObject("Structures").AddComponent<StructureSystem>();
+        Set(structures, "framePreviewMaterial", AssetDatabase.LoadAssetAtPath<Material>("Assets/_Textures/FramePreview.mat"));
+        VoxelStructure structure = structures.CreateStructure("Ship", Origin + Vector3.forward * 3, Quaternion.identity);
+        structure.SetVoxel(Vector3Int.zero, VoxelType.Metal);
+        structure.RebuildMeshes();
+        PlayerInput input = NewInput();
+        Inventory inventory = NewInventory();
+        ItemSO frame = AssetDatabase.LoadAssetAtPath<ItemSO>(VoxelPaletteEditor.AssetFolder + "/MetalFrameItem.asset");
+        inventory.AddItem(frame, 1);
+        PlayerPlacementController controller = input.gameObject.AddComponent<PlayerPlacementController>();
+        Set(controller, "playerInput", input);
+        Set(controller, "inventory", inventory);
+        Set(controller, "structures", structures);
+        Physics.SyncTransforms();
+        Call(controller, "LateUpdate");
+        GameObject preview = GameObject.Find("Frame placement preview");
+        Assert.That(preview, Is.Not.Null);
+        inventory.SetOpen(true);
+        Call(controller, "LateUpdate");
+        Assert.That(preview.activeSelf, Is.False);
+        inventory.SetOpen(false);
+        Call(controller, "LateUpdate");
+        Assert.That(preview.activeSelf, Is.True);
+        input.SetGameplayInputBlocked(true);
+        Call(controller, "LateUpdate");
+        Assert.That(preview.activeSelf, Is.False);
+        input.SetGameplayInputBlocked(false);
+        inventory.SelectHotbar(5);
+        Call(controller, "LateUpdate");
+        Assert.That(preview.activeSelf, Is.False);
+        inventory.SelectHotbar(0);
+        structure.gameObject.SetActive(false);
+        Physics.SyncTransforms();
+        Call(controller, "LateUpdate");
+        Assert.That(preview.activeSelf, Is.False);
+    }
+
+    [Test]
+    public void WindowAtlasHasAClearCentreAndPreservesExistingTiles()
+    {
+        Texture2D oldAtlas = new(2, 2), atlas = new(2, 2);
+        objects.Add(oldAtlas); objects.Add(atlas);
+        oldAtlas.LoadImage(File.ReadAllBytes("Assets/_Textures/pixil-frame-0 (4).png"));
+        atlas.LoadImage(File.ReadAllBytes("Assets/_Textures/VoxelAtlas.png"));
+        Assert.That(atlas.GetPixel(5 * 32 + 16, 16).a, Is.Zero);
+        Assert.That(atlas.GetPixel(5 * 32 + 16, 0).a, Is.GreaterThan(.9f));
+        foreach (Vector2Int tile in new[] { new Vector2Int(0, 0), new(2, 0), new(0, 2), new(1, 2), new(4, 0) })
+            Assert.That(atlas.GetPixels(tile.x * 32, tile.y * 32, 32, 32), Is.EqualTo(oldAtlas.GetPixels(tile.x * 32, tile.y * 32, 32, 32)));
     }
 
     private static bool PlaceVoxel(World world, RaycastHit hit, VoxelType type) =>

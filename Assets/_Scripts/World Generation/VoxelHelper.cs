@@ -2,6 +2,18 @@ using UnityEngine;
 
 public static class VoxelHelper
 {
+    public static void AddCubeFace(Direction direction, Vector3Int position, VoxelType type, MeshData meshData)
+    {
+        GetFaceVerticesCached(direction, null, position.x, position.y, position.z, meshData, type, true, default);
+        meshData.AddQuadTriangles(false);
+        meshData.AddQuadNormals();
+        AddFaceUvs(meshData, direction, type);
+        for (int i = 0; i < 4; i++)
+        {
+            meshData.tiledUvs.Add(new Vector2(-1f, -1f));
+            meshData.colors.Add(new Color32(255, 255, 255, 255));
+        }
+    }
  
     private static Direction[] directions =
     {
@@ -70,6 +82,7 @@ public static class VoxelHelper
         if (!VoxelRuntimeData.TryGet(voxelType, out VoxelRenderInfo voxelInfo))
             return meshData;
         bool isSmooth = voxelInfo.isSmoothable;
+        solidColor &= !voxelInfo.isTransparent;
         bool forceCube = false;
         VoxelType renderType = voxelType;
         var neighbours = new AxisNeighbours(context, x, y, z);
@@ -86,7 +99,7 @@ public static class VoxelHelper
             }
             if (!hasAnyNeighbor) forceCube = true;
         }
-        else
+        else if (!voxelInfo.isTransparent)
         {
             foreach (Direction dir in directions) {
                 VoxelType nvt = neighbours.Get(dir);
@@ -103,16 +116,7 @@ public static class VoxelHelper
         {
             VoxelType neighborVoxelType = neighbours.Get(direction);
 
-            if (neighborVoxelType != VoxelType.Nothing &&
-                VoxelRuntimeData.TryGet(neighborVoxelType, out VoxelRenderInfo neighbourInfo))
-            {
-                bool neighborSolid = neighbourInfo.isSolid;
-                if (!neighborSolid)
-                {
-                    meshData = GetFaceDataIn(direction, context, x, y, z, meshData, voxelType, renderType, forceCube, neighbours, solidColor);
-                }
-            }
-            else if (neighborVoxelType == VoxelType.Air)
+            if (VoxelRuntimeData.IsFaceVisible(voxelType, neighborVoxelType))
             {
                 meshData = GetFaceDataIn(direction, context, x, y, z, meshData, voxelType, renderType, forceCube, neighbours, solidColor);
             }

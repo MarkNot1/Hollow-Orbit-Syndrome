@@ -44,6 +44,8 @@ public class PlayerInput : MonoBehaviour
     private InputAction _placeVoxelAction;
     private InputAction _interactAction;
     private InputAction _circuitDetailsAction;
+    private InputAction saveStructuresAction, loadStructuresAction;
+    private StructureSystem structures;
     private bool gameplayInputBlocked;
     private readonly HashSet<object> inputBlockers = new();
     private readonly RaycastHit[] reticleHits = new RaycastHit[32];
@@ -76,6 +78,9 @@ public class PlayerInput : MonoBehaviour
         _placeVoxelAction = _playerMap.FindAction("PlaceVoxel");
         _interactAction = _playerMap.FindAction("Interact");
         _circuitDetailsAction = _playerMap.FindAction("CircuitDetails");
+        saveStructuresAction = _playerMap.FindAction("SaveStructures");
+        loadStructuresAction = _playerMap.FindAction("LoadStructures");
+        structures = FindFirstObjectByType<StructureSystem>();
 
         if (_flyAction != null)
             _flyAction.performed += OnFlyPerformed;
@@ -154,6 +159,9 @@ public class PlayerInput : MonoBehaviour
             RunningPressed = false;
             return;
         }
+
+        if (saveStructuresAction != null && saveStructuresAction.WasPressedThisFrame()) structures?.SaveStructures();
+        if (loadStructuresAction != null && loadStructuresAction.WasPressedThisFrame()) structures?.LoadStructures();
 
         if (_moveAction != null)
         {

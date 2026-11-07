@@ -14,6 +14,7 @@ public class ItemSO : ScriptableObject
     public ItemPlacementKind placementKind;
     public VoxelType voxelType;
     public string specialPrefabId;
+    public TextAsset structureBlueprint;
     public bool unlimited;
 }
 
@@ -21,5 +22,6 @@ public enum ItemPlacementKind
 {
     None,
     TerrainVoxel,
-    SpecialPrefab
+    SpecialPrefab,
+    StructureBlueprint
 }

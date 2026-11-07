@@ -139,6 +139,12 @@ public class ObjectPlacer : MonoBehaviour
         activeGrid = null;
     }
 
+    public void ForgetCircuit(SpecialPrefabInteractable circuit)
+    {
+        if (activeBoard?.Circuit == circuit) ClearActiveBoard();
+        placedComponentsByCircuit.Remove(circuit);
+    }
+
     public bool BeginPlacement(int componentId)
     {
         EndPlacement();

@@ -38,6 +38,7 @@ public readonly struct VoxelRenderInfo
     public readonly bool isSolid;
     public readonly bool generatesCollider;
     public readonly bool isSmoothable;
+    public readonly bool isTransparent;
     public readonly Vector2Int up;
     public readonly Vector2Int down;
     public readonly Vector2Int side;
@@ -49,6 +50,7 @@ public readonly struct VoxelRenderInfo
         isSolid = data != null && data.isSolid;
         generatesCollider = data != null && data.generatesCollider;
         isSmoothable = data != null && data.isSmoothable;
+        isTransparent = data != null && data.isTransparent;
         up = data != null ? data.up : Vector2Int.zero;
         down = data != null ? data.down : Vector2Int.zero;
         side = data != null ? data.side : Vector2Int.zero;
@@ -64,7 +66,8 @@ public readonly struct VoxelRenderInfo
             VoxelType.Infected_Growth => new Color32(0x41, 0x25, 0x6E, 255),
             VoxelType.Ship_Metal => new Color32(0x11, 0x35, 0x37, 255),
             VoxelType.Metal => new Color32(0x11, 0x35, 0x37, 255),
-            VoxelType.Rock => new Color32(54, 61, 68, 255),
+            VoxelType.Dark_Ship_Metal => new Color32(54, 61, 68, 255),
+            VoxelType.Striped_Ship_Metal => new Color32(72, 56, 48, 255),
             _ => new Color32(90, 90, 90, 255)
         };
     }
@@ -111,6 +114,13 @@ public static class VoxelRuntimeData
     {
         return type != VoxelType.Nothing && type != VoxelType.Air &&
                TryGet(type, out VoxelRenderInfo info) && info.isSolid;
+    }
+
+    public static bool IsFaceVisible(VoxelType type, VoxelType neighbour)
+    {
+        return neighbour == VoxelType.Air || (neighbour != VoxelType.Nothing &&
+            TryGet(neighbour, out VoxelRenderInfo info) &&
+            (!info.isSolid || (info.isTransparent && neighbour != type)));
     }
 
     public static Vector2Int TexturePosition(Direction direction, VoxelType type)

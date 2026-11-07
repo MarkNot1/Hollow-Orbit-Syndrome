@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 814572e0448541c4e8a1073430609941, type: 3}
+  m_Name: MetalFrameItem
+  m_EditorClassIdentifier: Assembly-CSharp::ItemSO
+  itemName: Metal Frame
+  itemIcon: {fileID: 21300000, guid: 0f254f671895405458f4492606887c1d, type: 3}
+  maxStackSize: 0
+  itemPrefab: {fileID: 0}
+  handItemPrefab: {fileID: 1210573883751993469, guid: 5994cc3995b5c834bb748cf7b7c6ec1c, type: 3}
+  description: An editable 6 x 6 x 6 dark ship metal frame with open faces. Place
+    on an existing structure to extend it. Use a Master Frame to start a structure.
+  placementKind: 3
+  voxelType: 2
+  specialPrefabId: 
+  structureBlueprint: {fileID: 4900000, guid: 2195784eb0a707946ba7d6e67a4f1c0c, type: 3}
+  unlimited: 1

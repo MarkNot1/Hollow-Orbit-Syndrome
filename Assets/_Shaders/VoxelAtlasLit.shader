@@ -12,6 +12,29 @@ Shader "HollowOrbit/Voxel Atlas Lit"
     {
         Tags { "RenderType"="Opaque" "Queue"="Geometry" "RenderPipeline"="UniversalPipeline" }
 
+        HLSLINCLUDE
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        TEXTURE2D(_BaseMap);
+        SAMPLER(sampler_BaseMap);
+        CBUFFER_START(UnityPerMaterial)
+            float4 _BaseMap_ST;
+            half4 _BaseColor;
+            float4 _VoxelAtlasTileSize;
+            float _VoxelAtlasInset;
+        CBUFFER_END
+
+        half4 SampleAtlas(float2 uv, float2 tiledUv)
+        {
+            if (tiledUv.x > -0.5)
+            {
+                float2 repeated = frac(tiledUv + 0.00001);
+                float2 inset = _VoxelAtlasInset.xx;
+                uv += inset + repeated * max(_VoxelAtlasTileSize.xy - inset * 2.0, 0.0001);
+            }
+            return SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, uv) * _BaseColor;
+        }
+        ENDHLSL
+
         Pass
         {
             Name "ForwardLit"
@@ -27,16 +50,6 @@ Shader "HollowOrbit/Voxel Atlas Lit"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-
-            TEXTURE2D(_BaseMap);
-            SAMPLER(sampler_BaseMap);
-
-            CBUFFER_START(UnityPerMaterial)
-                float4 _BaseMap_ST;
-                half4 _BaseColor;
-                float4 _VoxelAtlasTileSize;
-                float _VoxelAtlasInset;
-            CBUFFER_END
 
             struct Attributes
             {
@@ -85,15 +98,8 @@ Shader "HollowOrbit/Voxel Atlas Lit"
                 }
                 else
                 {
-                    float2 sampleUv = input.uv;
-                    if (input.tiledUv.x > -0.5)
-                    {
-                        float2 repeated = frac(input.tiledUv + 0.00001);
-                        float2 inset = _VoxelAtlasInset.xx;
-                        sampleUv = input.uv + inset + repeated * max(_VoxelAtlasTileSize.xy - inset * 2.0, 0.0001);
-                    }
-
-                    albedo = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, sampleUv) * _BaseColor;
+                    albedo = SampleAtlas(input.uv, input.tiledUv);
+                    clip(albedo.a - 0.5h);
                 }
                 half3 normalWS = normalize(input.normalWS);
                 // Do not sample the camera-bounded main-light shadow atlas here.
@@ -136,9 +142,18 @@ Shader "HollowOrbit/Voxel Atlas Lit"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+                float2 tiledUv : TEXCOORD1;
             };
 
-            float4 ShadowVert(ShadowAttributes input) : SV_POSITION
+            struct ShadowVaryings
+            {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float2 tiledUv : TEXCOORD1;
+            };
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
             {
                 float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
@@ -154,10 +169,19 @@ Shader "HollowOrbit/Voxel Atlas Lit"
                 #else
                     positionCS.z = max(positionCS.z, UNITY_NEAR_CLIP_VALUE);
                 #endif
-                return positionCS;
+                ShadowVaryings output;
+                output.positionCS = positionCS;
+                output.uv = input.uv;
+                output.tiledUv = input.tiledUv;
+                return output;
             }
 
-            half4 ShadowFrag() : SV_Target { return 0; }
+            half4 ShadowFrag(ShadowVaryings input) : SV_Target
+            {
+                if (input.tiledUv.x >= -1.5)
+                    clip(SampleAtlas(input.uv, input.tiledUv).a - 0.5h);
+                return 0;
+            }
             ENDHLSL
         }
     }

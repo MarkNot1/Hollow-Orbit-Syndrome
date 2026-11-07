@@ -21,4 +21,5 @@ public class TextureData
     public bool isSolid = true;
     public bool generatesCollider = true;
     public bool isSmoothable = false;
+    public bool isTransparent = false;
 }

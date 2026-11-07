@@ -16,7 +16,7 @@ public class DistanceSimplifierTests
         voxelData.textureDataList = new List<TextureData>
         {
             Info(VoxelType.Air, false, false, false, 0),
-            Info(VoxelType.Rock, true, true, true, 1),
+            Info(VoxelType.Dark_Ship_Metal, true, true, true, 1),
             Info(VoxelType.Infected_Growth, true, true, true, 2),
             Info(VoxelType.Ship_Metal, true, false, false, 3),
             Info(VoxelType.Metal, true, true, false, 4)
@@ -288,7 +288,7 @@ public class DistanceSimplifierTests
         data.SetVoxel(1, 3, 1, VoxelType.Air);
 
         Assert.That(data.GetFarSurfaceColumn(1, 1).topY, Is.EqualTo(2));
-        Assert.That(data.GetFarSurfaceColumn(1, 1).material, Is.EqualTo(VoxelType.Rock));
+        Assert.That(data.GetFarSurfaceColumn(1, 1).material, Is.EqualTo(VoxelType.Dark_Ship_Metal));
     }
 
     [Test]
@@ -344,7 +344,7 @@ public class DistanceSimplifierTests
             new DomainWarpSnapshot(null),
             false,
             VoxelType.Infected_Growth,
-            VoxelType.Rock,
+            VoxelType.Dark_Ship_Metal,
             null);
         var data = new ChunkData(4, 12, null, Vector3Int.zero);
 
@@ -360,7 +360,7 @@ public class DistanceSimplifierTests
                 for (int y = 0; y < data.chunkHeight; y++)
                 {
                     VoxelType expected = y > surface ? VoxelType.Air :
-                        y == surface ? VoxelType.Infected_Growth : VoxelType.Rock;
+                        y == surface ? VoxelType.Infected_Growth : VoxelType.Dark_Ship_Metal;
                     int index = x + data.chunkSize * y + data.chunkSize * data.chunkHeight * z;
                     Assert.That(data.voxels[index], Is.EqualTo(expected));
                 }
@@ -408,7 +408,7 @@ public class DistanceSimplifierTests
     [Test]
     public void MixedSolidMaterials_DoNotCreateBuriedCollisionFaces()
     {
-        voxelData.textureDataList.Find(data => data.voxelType == VoxelType.Rock).isSmoothable = false;
+        voxelData.textureDataList.Find(data => data.voxelType == VoxelType.Dark_Ship_Metal).isSmoothable = false;
         VoxelRuntimeData.Capture(voxelData);
         var chunks = new Dictionary<Vector3Int, ChunkData>();
         for (int y = -1; y <= 1; y++)
@@ -731,7 +731,7 @@ public class DistanceSimplifierTests
     {
         var data = new ChunkData(size, height, null, position);
         for (int i = 0; i < data.voxels.Length; i++)
-            data.voxels[i] = VoxelType.Rock;
+            data.voxels[i] = VoxelType.Dark_Ship_Metal;
         data.MarkGenerated();
         return data;
     }
@@ -744,10 +744,10 @@ public class DistanceSimplifierTests
             for (int x = 0; x < size; x++)
             {
                 for (int y = 0; y <= topY; y++)
-                    data.voxels[x + size * y + size * height * z] = VoxelType.Rock;
+                    data.voxels[x + size * y + size * height * z] = VoxelType.Dark_Ship_Metal;
                 for (int y = topY + 1; y < height; y++)
                     data.voxels[x + size * y + size * height * z] = VoxelType.Air;
-                data.SetGeneratedSurfaceColumn(x, z, topY, VoxelType.Rock);
+                data.SetGeneratedSurfaceColumn(x, z, topY, VoxelType.Dark_Ship_Metal);
             }
         }
         data.MarkGeneratedFromSurfaceColumns();
@@ -762,7 +762,7 @@ public class DistanceSimplifierTests
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < size; x++)
-                    data.voxels[x + size * y + size * height * z] = y <= topY ? VoxelType.Rock : VoxelType.Air;
+                    data.voxels[x + size * y + size * height * z] = y <= topY ? VoxelType.Dark_Ship_Metal : VoxelType.Air;
             }
         }
         data.MarkGenerated();

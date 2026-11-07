@@ -92,6 +92,8 @@ public class SpecialPrefabInteractable : MonoBehaviour, IInspectableInteractable
     public Vector3 GetPreferredViewDirection()
     {
         Vector3 normal = (Vector3)surfaceNormal;
+        VoxelStructure structure = GetComponentInParent<VoxelStructure>();
+        if (structure != null) normal = structure.transform.TransformDirection(normal);
         if (normal.sqrMagnitude < 0.01f)
             normal = transform.forward;
 

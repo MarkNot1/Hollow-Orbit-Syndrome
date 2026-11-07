@@ -22,4 +22,5 @@ MonoBehaviour:
   placementKind: 1
   voxelType: 3
   specialPrefabId: 
+  structureBlueprint: {fileID: 0}
   unlimited: 1

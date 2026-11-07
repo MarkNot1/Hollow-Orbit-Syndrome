@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 814572e0448541c4e8a1073430609941, type: 3}
-  m_Name: RockItem
+  m_Name: Dark Ship MetalItem
   m_EditorClassIdentifier: Assembly-CSharp::ItemSO
-  itemName: Rock
+  itemName: Dark Ship Metal
   itemIcon: {fileID: 21300000, guid: 427b25abc88e16d428fb19ed35edda4b, type: 3}
   maxStackSize: 0
   itemPrefab: {fileID: 0}
@@ -22,4 +22,5 @@ MonoBehaviour:
   placementKind: 1
   voxelType: 2
   specialPrefabId: 
+  structureBlueprint: {fileID: 0}
   unlimited: 1

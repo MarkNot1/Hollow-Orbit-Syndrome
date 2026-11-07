@@ -15,7 +15,8 @@ public static class VoxelPaletteEditor
     public const string AssetFolder = "Assets/_Prefabs/InventoryPrefabs/Voxels";
     private const string ScenePath = "Assets/Scenes/SampleScene.unity";
     private static readonly VoxelType[] Types =
-        { VoxelType.Rock, VoxelType.Infected_Growth, VoxelType.Ship_Metal, VoxelType.Metal };
+        { VoxelType.Dark_Ship_Metal, VoxelType.Infected_Growth, VoxelType.Ship_Metal, VoxelType.Metal,
+            VoxelType.Striped_Ship_Metal, VoxelType.Window };
 
     [MenuItem("Tools/Voxels/Regenerate Inventory Visuals")]
     public static void Regenerate()
@@ -56,8 +57,49 @@ public static class VoxelPaletteEditor
             SaveItem("Circuit", "Circuit", circuitVisual, ItemPlacementKind.SpecialPrefab, VoxelType.Nothing);
         }
         finally { UnityEngine.Object.DestroyImmediate(circuitVisual); }
+        GenerateFrame(database, material, false);
+        GenerateFrame(database, material, true);
         AssetDatabase.SaveAssets();
-        Debug.Log("Regenerated five voxel inventory icons and visual-only held models.");
+        Debug.Log("Regenerated voxel inventory visuals and frame blueprints.");
+    }
+
+    private static void GenerateFrame(VoxelDataSO database, Material material, bool master)
+    {
+        StructureData frame = FrameBlueprint.Create(master);
+        string id = master ? "MasterFrame" : "MetalFrame";
+        var cubes = frame.voxels.Select(v => v.type).Distinct().ToDictionary(type => type, type => BuildCube(database, type));
+        List<CombineInstance> pieces = new();
+        foreach (StructureVoxelData voxel in frame.voxels)
+        {
+            pieces.Add(new CombineInstance { mesh = cubes[voxel.type],
+                transform = Matrix4x4.TRS(((Vector3)voxel.position - Vector3.one * 2.5f) / 6f, Quaternion.identity, Vector3.one / 6f) });
+        }
+        string blueprintPath = $"{AssetFolder}/{id}.json";
+        File.WriteAllText(blueprintPath, JsonUtility.ToJson(frame, true));
+        AssetDatabase.ImportAsset(blueprintPath, ImportAssetOptions.ForceSynchronousImport);
+        Mesh mesh = new() { name = frame.name + " Display" };
+        mesh.CombineMeshes(pieces.ToArray());
+        foreach (Mesh cube in cubes.Values) UnityEngine.Object.DestroyImmediate(cube);
+        string meshPath = $"{AssetFolder}/{id}.asset";
+        Mesh saved = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
+        if (saved == null) { saved = mesh; AssetDatabase.CreateAsset(saved, meshPath); }
+        else
+        {
+            EditorUtility.CopySerialized(mesh, saved);
+            EditorUtility.SetDirty(saved);
+            UnityEngine.Object.DestroyImmediate(mesh);
+        }
+        GameObject visual = new(frame.name);
+        visual.AddComponent<MeshFilter>().sharedMesh = saved;
+        visual.AddComponent<MeshRenderer>().sharedMaterial = material;
+        try { SaveItem(id, frame.name, visual, ItemPlacementKind.StructureBlueprint, VoxelType.Dark_Ship_Metal); }
+        finally { UnityEngine.Object.DestroyImmediate(visual); }
+        ItemSO item = AssetDatabase.LoadAssetAtPath<ItemSO>($"{AssetFolder}/{id}Item.asset");
+        item.structureBlueprint = AssetDatabase.LoadAssetAtPath<TextAsset>(blueprintPath);
+        item.description = master
+            ? "Starts a structure at local (0, 0, 0). Its 6 x 6 x 6 metal border cannot be removed. Orange stripes mark the centre pair of each bottom edge. F5 saves; F9 loads."
+            : "An editable 6 x 6 x 6 dark ship metal frame with open faces. Place on an existing structure to extend it. Use a Master Frame to start a structure.";
+        EditorUtility.SetDirty(item);
     }
 
     public static Mesh BuildCube(VoxelDataSO database, VoxelType type)
@@ -233,7 +275,9 @@ public static class VoxelPaletteEditor
             var serialized = new SerializedObject(inventory);
             SerializedProperty entries = serialized.FindProperty("items");
             SerializedProperty slots = serialized.FindProperty("hotbarItems");
-            string[] names = Types.Select(t => t.ToString()).Append("Circuit").ToArray();
+            string[] names = Types.Take(4).Select(t => t.ToString())
+                .Concat(new[] { "Circuit", "MasterFrame", "MetalFrame" })
+                .Concat(Types.Skip(4).Select(t => t.ToString())).ToArray();
             slots.arraySize = 6;
             for (int i = 0; i < names.Length; i++)
             {
@@ -249,14 +293,25 @@ public static class VoxelPaletteEditor
                     entry.FindPropertyRelative("item").objectReferenceValue = item;
                     entry.FindPropertyRelative("amount").intValue = 1;
                 }
-                slots.GetArrayElementAtIndex(i).objectReferenceValue = item;
+                if (i < slots.arraySize) slots.GetArrayElementAtIndex(i).objectReferenceValue = item;
             }
-            slots.GetArrayElementAtIndex(5).objectReferenceValue = null;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+            StructureSystem structures = scene.GetRootGameObjects().SelectMany(go => go.GetComponentsInChildren<StructureSystem>(true)).FirstOrDefault();
+            if (structures == null)
+            {
+                GameObject root = new("Structures");
+                SceneManager.MoveGameObjectToScene(root, scene);
+                structures = root.AddComponent<StructureSystem>();
+            }
+            SerializedObject structureSettings = new(structures);
+            structureSettings.FindProperty("voxelMaterial").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Textures/MainMaterial.mat");
+            structureSettings.FindProperty("prefabDatabase").objectReferenceValue = AssetDatabase.LoadAssetAtPath<SpecialPrefabDatabaseSO>("Assets/_Scripts/World Generation/SpecialPrefabDatabase.asset");
+            structureSettings.FindProperty("framePreviewMaterial").objectReferenceValue = GetFramePreviewMaterial();
+            structureSettings.ApplyModifiedPropertiesWithoutUndo();
             foreach (TMP_Text text in inventory.container.GetComponentsInChildren<TMP_Text>(true))
                 if (text.text.StartsWith("TAB / ESC"))
                 {
-                    text.text = "TAB / ESC  Close     1-6  Assign     ENTER  Equip     Q  Drop\nPlaying: Wheel / 1-6  Select     RMB  Place voxel     LMB  Break voxel";
+                    text.text = "TAB / ESC  Close     1-6  Assign     ENTER  Equip     Q  Drop\nPlaying: RMB  Place     LMB  Remove     F5  Save structures     F9  Load";
                     text.fontSize = 12f;
                     text.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 32f);
                 }
@@ -270,5 +325,22 @@ public static class VoxelPaletteEditor
     {
         Regenerate();
         ConfigureScene();
+    }
+
+    private static Material GetFramePreviewMaterial()
+    {
+        const string path = "Assets/_Textures/FramePreview.mat";
+        Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (material != null) return material;
+        material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        material.SetFloat("_Surface", 1);
+        material.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+        material.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+        material.SetFloat("_ZWrite", 0);
+        material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        material.SetOverrideTag("RenderType", "Transparent");
+        material.renderQueue = (int)RenderQueue.Transparent;
+        AssetDatabase.CreateAsset(material, path);
+        return material;
     }
 }

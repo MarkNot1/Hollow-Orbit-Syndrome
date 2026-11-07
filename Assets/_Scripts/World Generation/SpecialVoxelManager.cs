@@ -192,6 +192,23 @@ public class SpecialVoxelManager : MonoBehaviour
         spawnedPrefabs.Add(key, instance);
     }
 
+    public static GameObject CreateInstance(SpecialPrefabData prefab, Transform parent, Vector3Int surface, Vector3Int normal)
+    {
+        if (prefab?.Prefab == null) return null;
+        GameObject instance = Instantiate(prefab.Prefab, parent);
+        instance.transform.localPosition = (Vector3)surface * VoxelMetrics.Size +
+            (Vector3)normal * (VoxelMetrics.Size * 0.5f + SurfaceOffset);
+        instance.transform.localRotation = GetSurfaceRotation(normal);
+        FitInstanceToVoxelFace(instance, prefab.SizeInVoxels, normal);
+        EnsureCollider(instance);
+        SpecialPrefabInteractable interactable = instance.GetComponent<SpecialPrefabInteractable>() ??
+            instance.AddComponent<SpecialPrefabInteractable>();
+        interactable.Configure(prefab.ItemId, prefab.DisplayName, surface, normal, prefab.SizeInVoxels, prefab.InteractionType);
+        if (prefab.ItemId == CircuitItemId && instance.GetComponent<CircuitStructureState>() == null)
+            instance.AddComponent<CircuitStructureState>();
+        return instance;
+    }
+
     private bool EnsureWorldReady()
     {
         if (world == null)
@@ -272,16 +289,16 @@ public class SpecialVoxelManager : MonoBehaviour
         return new Vector2(sizeInVoxels.x, sizeInVoxels.y);
     }
 
-    private static Bounds GetLocalRenderBounds(GameObject instance)
+    public static Bounds GetLocalRenderBounds(GameObject instance)
     {
         Renderer[] renderers = instance.GetComponentsInChildren<Renderer>();
         if (renderers.Length == 0)
             return new Bounds(Vector3.zero, Vector3.zero);
 
         Matrix4x4 worldToRoot = instance.transform.worldToLocalMatrix;
-        Bounds bounds = TransformBounds(worldToRoot, renderers[0].bounds);
+        Bounds bounds = TransformBounds(worldToRoot * renderers[0].localToWorldMatrix, renderers[0].localBounds);
         for (int i = 1; i < renderers.Length; i++)
-            bounds.Encapsulate(TransformBounds(worldToRoot, renderers[i].bounds));
+            bounds.Encapsulate(TransformBounds(worldToRoot * renderers[i].localToWorldMatrix, renderers[i].localBounds));
 
         return bounds;
     }

@@ -203,7 +203,7 @@ public sealed class InventoryTests
     public void UnlimitedVoxelShowsInfinityAndCannotBeDroppedFromTheMenu()
     {
         Inventory inventory = OpenScene(out InventoryMenu menu, out _);
-        ItemSO voxel = NewItem("Rock");
+        ItemSO voxel = NewItem("Dark Ship Metal");
         voxel.unlimited = true;
         GameObject prefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
         created.Add(prefab);
