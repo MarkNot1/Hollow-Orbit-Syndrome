@@ -135,6 +135,12 @@ public sealed class InventoryTests
         menu = inventory.GetComponent<InventoryMenu>();
         Assert.That(menu, Is.Not.Null);
         inventory.hand = null; // No hand rendering is needed in these edit-mode UI checks.
+        // Legacy finite-inventory scenarios start empty; palette wiring has its own tests.
+        var serialized = new SerializedObject(inventory);
+        serialized.FindProperty("items").ClearArray();
+        SerializedProperty shortcuts = serialized.FindProperty("hotbarItems");
+        for (int i = 0; i < shortcuts.arraySize; i++) shortcuts.GetArrayElementAtIndex(i).objectReferenceValue = null;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
         Call(inventory, "Awake");
         Call(inventory, "Start");
         inventory.SetOpen(true);
@@ -167,7 +173,8 @@ public sealed class InventoryTests
     public void SceneRowsSelectionAndHoverUseTheExistingAssets()
     {
         Inventory inventory = OpenScene(out InventoryMenu menu, out _);
-        Assert.That(inventory.container.GetComponentsInChildren<Button>(true).Length, Is.EqualTo(2));
+        Assert.That(inventory.container.GetComponentsInChildren<Button>(true), Does.Contain(Get<Button>(menu, "equipButton")));
+        Assert.That(inventory.container.GetComponentsInChildren<Button>(true), Does.Contain(Get<Button>(menu, "dropButton")));
         Assert.That(Get<TextMeshProUGUI>(menu, "itemTitle").text, Is.Empty);
         Assert.That(Get<GameObject>(menu, "emptyMessage").activeSelf, Is.True);
         Assert.That(Get<Button>(menu, "equipButton").interactable, Is.False);
@@ -190,6 +197,25 @@ public sealed class InventoryTests
         inventory.SetOpen(false);
         Assert.That(inventory.container.activeSelf, Is.False);
         Assert.That(inventory.TryGetHoveredCircuitComponent(out _, out _), Is.False);
+    }
+
+    [Test]
+    public void UnlimitedVoxelShowsInfinityAndCannotBeDroppedFromTheMenu()
+    {
+        Inventory inventory = OpenScene(out InventoryMenu menu, out _);
+        ItemSO voxel = NewItem("Rock");
+        voxel.unlimited = true;
+        GameObject prefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        created.Add(prefab);
+        voxel.itemPrefab = prefab;
+        inventory.AddItem(voxel, 1);
+        menu.Refresh();
+        Assert.That(Get<TextMeshProUGUI>(menu, "itemCount").text, Is.EqualTo("Unlimited"));
+        Assert.That(Get<Button>(menu, "dropButton").interactable, Is.False);
+        Slot row = Get<List<Slot>>(menu, "rows")[0];
+        Assert.That(row.transform.GetChild(1).GetComponent<TextMeshProUGUI>().text, Is.EqualTo("∞"));
+        inventory.DropSelected();
+        Assert.That(inventory.GetAmount(voxel), Is.EqualTo(1));
     }
 
     [Test]

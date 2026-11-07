@@ -29,7 +29,7 @@ public class PlayerInteractionLock : MonoBehaviour
     public void SetLocked(bool locked)
     {
         if (playerInput != null)
-            playerInput.SetGameplayInputBlocked(locked);
+            playerInput.SetGameplayInputBlocked(locked, this);
 
         if (playerRigidbody != null)
         {

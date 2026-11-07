@@ -879,7 +879,7 @@ MonoBehaviour:
   IgnoreTimeScale: 0
   WorldUpOverride: {fileID: 0}
   ChannelMask: -1
-  UpdateMethod: 2
+  UpdateMethod: 1
   BlendUpdateMethod: 1
   LensModeOverride:
     Enabled: 0
@@ -3881,13 +3881,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bfc431f742144464f9aa7ea4f1ae9c3a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Inventory
-  items: []
+  items:
+  - item: {fileID: 11400000, guid: 00661ddeecf027449b24bd81460e72a0, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: 613fae7ac42e8f449a8cdfe03cd0aebe, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: 00f075ca9f1801647a47ccd95c789384, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: 218d1580a8e11a146a80db542151681d, type: 2}
+    amount: 1
+  - item: {fileID: 11400000, guid: 30b0575cfba392f44a7957995aa2fc6c, type: 2}
+    amount: 1
   hotbarItems:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 11400000, guid: 00661ddeecf027449b24bd81460e72a0, type: 2}
+  - {fileID: 11400000, guid: 613fae7ac42e8f449a8cdfe03cd0aebe, type: 2}
+  - {fileID: 11400000, guid: 00f075ca9f1801647a47ccd95c789384, type: 2}
+  - {fileID: 11400000, guid: 218d1580a8e11a146a80db542151681d, type: 2}
+  - {fileID: 11400000, guid: 30b0575cfba392f44a7957995aa2fc6c, type: 2}
   - {fileID: 0}
   inputActions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   hotbarObj: {fileID: 865684510}
@@ -4876,7 +4886,7 @@ RectTransform:
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
   m_AnchoredPosition: {x: 18, y: 12}
-  m_SizeDelta: {x: -36, y: 28}
+  m_SizeDelta: {x: -36, y: 32}
   m_Pivot: {x: 0, y: 0}
 --- !u!222 &7100000058
 CanvasRenderer:
@@ -4906,7 +4916,10 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: TAB / ESC  Close     1-6  Assign shortcut     ENTER  Equip     Q  Drop
+  m_text: 'TAB / ESC  Close     1-6  Assign     ENTER  Equip     Q  Drop
+
+    Playing:
+    Wheel / 1-6  Select     RMB  Place voxel     LMB  Break voxel'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -4933,8 +4946,8 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 14
-  m_fontSizeBase: 14
+  m_fontSize: 12
+  m_fontSizeBase: 12
   m_fontWeight: 400
   m_enableAutoSizing: 0
   m_fontSizeMin: 18

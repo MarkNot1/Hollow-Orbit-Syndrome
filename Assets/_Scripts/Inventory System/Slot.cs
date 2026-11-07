@@ -47,7 +47,8 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
         CacheReferences();
         iconImage.enabled = heldItem != null && heldItem.itemIcon != null;
         iconImage.sprite = heldItem != null ? heldItem.itemIcon : null;
-        amountTxt.text = heldItem != null ? itemAmount.ToString() : "";
+        amountTxt.text = heldItem == null ? "" : heldItem.unlimited ? "∞" : itemAmount.ToString();
+        iconImage.preserveAspect = true;
         if (itemNameText != null) itemNameText.text = heldItem != null ? heldItem.itemName : "";
     }
 

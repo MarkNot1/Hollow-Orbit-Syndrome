@@ -168,7 +168,8 @@ public class InteractionInspectionController : MonoBehaviour
             return;
         }
 
-        IPlayerInteractable interactable = targetedInteractable ?? FindTargetedInteractable();
+        if (playerInput == null || playerInput.IsGameplayInputBlocked) return;
+        IPlayerInteractable interactable = FindTargetedInteractable();
         if (interactable == null)
             return;
 

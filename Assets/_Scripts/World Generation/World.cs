@@ -69,11 +69,15 @@ public partial class World : MonoBehaviour
 
     internal bool SetVoxel(RaycastHit hit, VoxelType voxelType)
     {
-        ChunkRenderer chunk = hit.collider.GetComponent<ChunkRenderer>();
-        if (chunk == null)
+        ChunkRenderer chunk = hit.collider != null ? hit.collider.GetComponent<ChunkRenderer>() : null;
+        if (chunk == null || chunk.ChunkData == null || chunk.ChunkData.worldReference != this)
             return false;
 
         Vector3Int pos = GetVoxelPos(hit);
+        ChunkData data = WorldDataHelper.GetChunkData(this, pos);
+        if (data == null) return false;
+        VoxelType previous = Chunk.GetVoxelFromChunkCoordinates(data, Chunk.GetVoxelInChunkCoordinates(data, pos));
+        if (previous == VoxelType.Air || previous == VoxelType.Nothing || previous == voxelType) return false;
         WorldDataHelper.SetVoxel(chunk.ChunkData.worldReference, pos, voxelType);
         if (SpecialVoxels != null &&
             (voxelType == VoxelType.Air || voxelType == VoxelType.Nothing))
@@ -88,29 +92,10 @@ public partial class World : MonoBehaviour
     /// </summary>
     internal bool PlaceVoxel(RaycastHit hit, VoxelType voxelType)
     {
-        ChunkRenderer chunk = hit.collider.GetComponent<ChunkRenderer>();
-        if (chunk == null)
+        if (!VoxelRuntimeData.IsSolid(voxelType) || !TryGetVoxelPlacementCell(hit, out Vector3Int pos))
             return false;
 
-        Vector3Int hitPos = VoxelMetrics.WorldHitToTargetVoxelIndex(hit);
-        Vector3Int normal = new Vector3Int(
-            Mathf.RoundToInt(hit.normal.x),
-            Mathf.RoundToInt(hit.normal.y),
-            Mathf.RoundToInt(hit.normal.z));
-        Vector3Int pos = hitPos + normal;
-
-        ChunkData existingChunkData =
-            WorldDataHelper.GetChunkData(chunk.ChunkData.worldReference, pos);
-        if (existingChunkData != null)
-        {
-            Vector3Int localPos = Chunk.GetVoxelInChunkCoordinates(existingChunkData, pos);
-            VoxelType existing =
-                Chunk.GetVoxelFromChunkCoordinates(existingChunkData, localPos);
-            if (existing != VoxelType.Air && existing != VoxelType.Nothing)
-                return false;
-        }
-
-        WorldDataHelper.SetVoxel(chunk.ChunkData.worldReference, pos, voxelType);
+        WorldDataHelper.SetVoxel(this, pos, voxelType);
 
         Vector3Int[] faceNeighbours =
         {
@@ -124,7 +109,7 @@ public partial class World : MonoBehaviour
         foreach (Vector3Int neighbourPos in faceNeighbours)
         {
             ChunkData neighbourData =
-                WorldDataHelper.GetChunkData(chunk.ChunkData.worldReference, neighbourPos);
+                WorldDataHelper.GetChunkData(this, neighbourPos);
             if (neighbourData == null)
                 continue;
 
@@ -134,25 +119,43 @@ public partial class World : MonoBehaviour
                 VoxelType.Nothing)
             {
                 WorldDataHelper.SetVoxel(
-                    chunk.ChunkData.worldReference,
+                    this,
                     neighbourPos,
                     VoxelType.Air);
             }
         }
 
-        ChunkData targetChunkData =
-            WorldDataHelper.GetChunkData(chunk.ChunkData.worldReference, pos);
-        if (targetChunkData != null)
-        {
-            targetChunkData.modifiedByThePlayer = true;
-            RequestChunkRemesh(targetChunkData, Chunk.IsOnEdge(targetChunkData, pos));
-        }
-        else
-        {
-            chunk.ModifiedByThePlayer = true;
-            RequestChunkRemesh(chunk.ChunkData, true);
-        }
+        ChunkData targetChunkData = WorldDataHelper.GetChunkData(this, pos);
+        targetChunkData.modifiedByThePlayer = true;
+        RequestChunkRemesh(targetChunkData, Chunk.IsOnEdge(targetChunkData, pos));
 
+        return true;
+    }
+
+    private readonly Collider[] placementOverlaps = new Collider[32];
+
+    internal bool TryGetVoxelPlacementCell(RaycastHit hit, out Vector3Int position)
+    {
+        position = default;
+        ChunkRenderer source = hit.collider != null ? hit.collider.GetComponent<ChunkRenderer>() : null;
+        if (source == null || source.ChunkData == null || source.ChunkData.worldReference != this ||
+            VoxelMetrics.FaceNormal(hit.normal) == Vector3Int.zero) return false;
+        Vector3Int surface = VoxelMetrics.WorldHitToTargetVoxelIndex(hit);
+        ChunkData surfaceData = WorldDataHelper.GetChunkData(this, surface);
+        if (surfaceData == null || !VoxelRuntimeData.IsSolid(Chunk.GetVoxelFromChunkCoordinates(
+                surfaceData, Chunk.GetVoxelInChunkCoordinates(surfaceData, surface)))) return false;
+        position = VoxelMetrics.WorldHitToAdjacentVoxelIndex(hit);
+        ChunkData destination = WorldDataHelper.GetChunkData(this, position);
+        if (destination == null) return false;
+        VoxelType existing = Chunk.GetVoxelFromChunkCoordinates(destination, Chunk.GetVoxelInChunkCoordinates(destination, position));
+        if (existing != VoxelType.Air && existing != VoxelType.Nothing) return false;
+        int count = Physics.OverlapBoxNonAlloc((Vector3)position * VoxelMetrics.Size,
+            Vector3.one * (VoxelMetrics.Size * 0.5f - 0.005f), placementOverlaps,
+            Quaternion.identity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        if (count == placementOverlaps.Length) return false;
+        // Chunk occupancy above is authoritative while their colliders are being rebuilt.
+        for (int i = 0; i < count; i++)
+            if (placementOverlaps[i].GetComponent<ChunkRenderer>() == null) return false;
         return true;
     }
 

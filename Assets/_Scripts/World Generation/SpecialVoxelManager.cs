@@ -135,7 +135,8 @@ public class SpecialVoxelManager : MonoBehaviour
         Vector3Int sizeInVoxels,
         SpecialPrefabInteractionType interactionType)
     {
-        if (prefab == null || string.IsNullOrWhiteSpace(itemId) || !EnsureWorldReady())
+        if (prefab == null || string.IsNullOrWhiteSpace(itemId) || !EnsureWorldReady() ||
+            !world.TryGetVoxelPlacementCell(hit, out _))
             return false;
 
         Vector3Int surfaceVoxel = VoxelMetrics.WorldHitToTargetVoxelIndex(hit);
@@ -233,10 +234,7 @@ public class SpecialVoxelManager : MonoBehaviour
 
     private static Vector3Int RoundNormal(Vector3 normal)
     {
-        return new Vector3Int(
-            Mathf.RoundToInt(normal.x),
-            Mathf.RoundToInt(normal.y),
-            Mathf.RoundToInt(normal.z));
+        return VoxelMetrics.FaceNormal(normal);
     }
 
     private static Quaternion GetSurfaceRotation(Vector3Int normal)

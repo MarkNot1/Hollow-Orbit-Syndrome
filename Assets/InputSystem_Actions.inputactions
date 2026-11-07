@@ -97,7 +97,7 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "DestroyBlock",
+                    "name": "DestroyVoxel",
                     "type": "Button",
                     "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
                     "expectedControlType": "Button",
@@ -109,6 +109,15 @@
                     "name": "CircuitDetails",
                     "type": "Button",
                     "id": "e9c7fbb1-6acd-4e8e-91ad-d2ed7f6a24b1",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "PlaceVoxel",
+                    "type": "Button",
+                    "id": "29c9bb55-117d-4f80-8309-eacaea35a681",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -449,11 +458,11 @@
                 {
                     "name": "",
                     "id": "d4e5f6a7-b8c9-0123-def0-456789012345",
-                    "path": "<Mouse>/rightButton",
+                    "path": "<Mouse>/leftButton",
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
-                    "action": "DestroyBlock",
+                    "action": "DestroyVoxel",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -542,6 +551,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "CircuitDetails",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "f8c12ece-1b1e-4733-9295-6a3b2aac9eba",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "PlaceVoxel",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

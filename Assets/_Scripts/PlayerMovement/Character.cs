@@ -1,19 +1,14 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class Character : MonoBehaviour
 {
-    [SerializeField]
-    private Camera mainCamera;
     [SerializeField]
     private PlayerInput playerInput;
     [SerializeField]
     private PlayerMovement playerMovement;
     [SerializeField]
     private PlayerPlacementController placementController;
-
-    public float interactionRayLength = 5;
 
     public bool fly = false;
 
@@ -23,25 +18,20 @@ public class Character : MonoBehaviour
 
     public World world;
 
-    private static readonly RaycastHit[] RaycastHitsNonAlloc = new RaycastHit[32];
-
     private void Awake()
     {
-        if (mainCamera == null)
-            mainCamera = Camera.main;
         playerInput = GetComponent<PlayerInput>();
         playerMovement = GetComponent<PlayerMovement>();
         placementController = GetComponent<PlayerPlacementController>();
         if (placementController == null)
             placementController = gameObject.AddComponent<PlayerPlacementController>();
-        placementController.InteractionRayLength = interactionRayLength;
         world = FindFirstObjectByType<World>();
     }
 
     private void Start()
     {
-        playerInput.OnDestroyBlock += TryDeleteTargetBlock;
-        playerInput.OnPlaceBlock += TryPlaceSelectedItem;
+        playerInput.OnDestroyVoxel += TryDeleteTargetVoxel;
+        playerInput.OnPlaceVoxel += TryPlaceEquippedVoxel;
         playerInput.OnFly += HandleFlyClick;
     }
 
@@ -49,8 +39,8 @@ public class Character : MonoBehaviour
     {
         if (playerInput != null)
         {
-            playerInput.OnDestroyBlock -= TryDeleteTargetBlock;
-            playerInput.OnPlaceBlock -= TryPlaceSelectedItem;
+            playerInput.OnDestroyVoxel -= TryDeleteTargetVoxel;
+            playerInput.OnPlaceVoxel -= TryPlaceEquippedVoxel;
             playerInput.OnFly -= HandleFlyClick;
         }
     }
@@ -96,38 +86,18 @@ public class Character : MonoBehaviour
         isWaiting = false;
     }
 
-    private void TryDeleteTargetBlock()
+    private void TryDeleteTargetVoxel()
     {
-        if (world == null || mainCamera == null)
-            return;
-
-        Ray ray = new Ray(mainCamera.transform.position, mainCamera.transform.forward);
-        int hitCount = Physics.RaycastNonAlloc(ray, RaycastHitsNonAlloc, interactionRayLength, ~0, QueryTriggerInteraction.Ignore);
-        if (hitCount <= 0)
-            return;
-
-        int bestIndex = -1;
-        float bestDistance = float.MaxValue;
-        for (int i = 0; i < hitCount; i++)
-        {
-            RaycastHit h = RaycastHitsNonAlloc[i];
-            if (h.collider != null && h.collider.GetComponent<ChunkRenderer>() != null && h.distance < bestDistance)
-            {
-                bestDistance = h.distance;
-                bestIndex = i;
-            }
-        }
-
-        if (bestIndex >= 0)
-            world.SetVoxel(RaycastHitsNonAlloc[bestIndex], VoxelType.Air);
+        if (world != null && playerInput.TryGetReticleHit(out RaycastHit hit) &&
+            hit.collider.GetComponent<ChunkRenderer>() != null)
+            world.SetVoxel(hit, VoxelType.Air);
     }
 
-    private void TryPlaceSelectedItem()
+    private void TryPlaceEquippedVoxel()
     {
         if (placementController == null)
             return;
 
-        placementController.InteractionRayLength = interactionRayLength;
-        placementController.TryPlaceSelectedItem();
+        placementController.TryPlaceEquippedVoxel();
     }
 }

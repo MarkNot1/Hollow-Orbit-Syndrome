@@ -46,12 +46,13 @@ public sealed class InventoryMenu : MonoBehaviour
         itemTitle.text = item != null ? item.itemName : "";
         itemDescription.text = item == null ? "Select an item to inspect it." :
             string.IsNullOrWhiteSpace(item.description) ? "No description available." : item.description;
-        itemCount.text = item != null ? $"Quantity  {inventory.GetAmount(item)}" : "";
+        itemCount.text = item == null ? "" : item.unlimited ? "Unlimited" : $"Quantity  {inventory.GetAmount(item)}";
         itemIcon.sprite = item != null ? item.itemIcon : null;
         itemIcon.enabled = itemIcon.sprite != null;
+        itemIcon.preserveAspect = true;
         emptyMessage.SetActive(inventory.Items.Count == 0);
         equipButton.interactable = item != null;
-        dropButton.interactable = item != null && item.itemPrefab != null;
+        dropButton.interactable = item != null && !item.unlimited && item.itemPrefab != null;
     }
 
     // Only visible rows exist. Rebind on scrolling, without rebuilding a layout or the whole list.

@@ -501,7 +501,7 @@ public partial class World
             !cached.IsCollisionActive && cached.TryReactivateCollision(data.ContentVersion))
             collisionTransformsDirty = true;
 
-        if (!HasHorizontalHalo(position))
+        if (!HasMeshHalo(position))
             return;
         // A retained collider is the safety bridge to the new 3x3. Do not replace
         // its render mesh or start another bake merely because its visual LOD
@@ -560,13 +560,17 @@ public partial class World
         });
     }
 
-    private bool HasHorizontalHalo(Vector3Int position)
+    private bool HasMeshHalo(Vector3Int position)
     {
         for (int x = -1; x <= 1; x++)
         {
             for (int z = -1; z <= 1; z++)
             {
-                if (!worldData.chunkDataDictionary.ContainsKey(position + new Vector3Int(x * chunkSize, 0, z * chunkSize)))
+                Vector3Int neighbor = position + new Vector3Int(x * chunkSize, 0, z * chunkSize);
+                if (!worldData.chunkDataDictionary.ContainsKey(neighbor))
+                    return false;
+                // Missing covering data would expose a false underground surface.
+                if (position.y < 0 && !worldData.chunkDataDictionary.ContainsKey(neighbor + Vector3Int.up * chunkHeight))
                     return false;
             }
         }
@@ -701,7 +705,7 @@ public partial class World
             return;
 
         ChunkMeshContext context = CreateMeshContext(stalledPosition);
-        if (context == null || !HasHorizontalHalo(stalledPosition))
+        if (context == null || !HasMeshHalo(stalledPosition))
         {
             TryScheduleMesh(stalledPosition, true);
             return;
@@ -970,8 +974,8 @@ public partial class World
     {
         if (retainedCollision.Count == 0)
             return;
-        // Do not release the old 3x3 until every replacement surface chunk has
-        // either activated its collider or resolved as empty.
+        // Keep the previous neighborhood until the player's layer is ready.
+        // Speculative underground work must not hold distant surface colliders.
         if (!AreDesiredCollisionChunksReady())
             return;
 
@@ -997,9 +1001,10 @@ public partial class World
 
     private bool AreDesiredCollisionChunksReady()
     {
+        int playerLayer = Mathf.Min(0, streamCenterChunk.y);
         foreach (Vector3Int position in desiredCollision)
         {
-            if (!IsCollisionChunkResolved(position))
+            if (position.y == playerLayer && !IsCollisionChunkResolved(position))
                 return false;
         }
         return true;

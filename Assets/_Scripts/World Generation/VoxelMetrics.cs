@@ -33,7 +33,7 @@ public static class VoxelMetrics
     }
 
     /// <summary>
-    /// Voxel index of the solid hit by a ray (nudge slightly along -normal so boundary hits resolve inside the block).
+    /// Voxel index of the solid hit by a ray (nudge slightly along -normal so boundary hits resolve inside the voxel).
     /// </summary>
     public static Vector3Int WorldHitToTargetVoxelIndex(RaycastHit hit, float surfaceBiasMeters = 0.002f)
     {
@@ -41,11 +41,22 @@ public static class VoxelMetrics
     }
 
     /// <summary>
-    /// Voxel index of the empty cell adjacent to the hit face (nudge along +normal).
-    /// Use this when placing a new voxel so it lands on top of — not inside — the surface.
+    /// Voxel index one cell beyond the hit face, including smoothed terrain faces.
     /// </summary>
     public static Vector3Int WorldHitToAdjacentVoxelIndex(RaycastHit hit, float surfaceBiasMeters = 0.002f)
     {
-        return WorldPointToVoxelIndex(hit.point + hit.normal * surfaceBiasMeters);
+        return WorldHitToTargetVoxelIndex(hit, surfaceBiasMeters) + FaceNormal(hit.normal);
+    }
+
+    // Smoothed terrain can produce diagonal normals. Placement still advances exactly one cell.
+    public static Vector3Int FaceNormal(Vector3 normal)
+    {
+        Vector3 magnitude = new(Mathf.Abs(normal.x), Mathf.Abs(normal.y), Mathf.Abs(normal.z));
+        if (magnitude.sqrMagnitude < 0.0001f) return Vector3Int.zero;
+        if (magnitude.y >= magnitude.x && magnitude.y >= magnitude.z)
+            return normal.y >= 0f ? Vector3Int.up : Vector3Int.down;
+        if (magnitude.x >= magnitude.z)
+            return normal.x >= 0f ? Vector3Int.right : Vector3Int.left;
+        return normal.z >= 0f ? Vector3Int.forward : Vector3Int.back;
     }
 }

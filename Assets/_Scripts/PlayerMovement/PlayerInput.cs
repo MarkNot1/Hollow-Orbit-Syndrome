@@ -11,18 +11,20 @@ public class PlayerInput : MonoBehaviour
 {
     [Header("Input Actions")]
     [SerializeField]
-    [Tooltip("Assign the InputSystem_Actions asset. Must contain a 'Player' action map with: Move, Look, Jump, Sprint, Fly, DestroyBlock (optional).")]
+    [Tooltip("Assign the InputSystem_Actions asset. Must contain a 'Player' action map with: Move, Look, Jump, Sprint, Fly, PlaceVoxel, DestroyVoxel.")]
     private InputActionAsset inputActions;
 
     [Header("Reticle")]
     [SerializeField] private Camera reticleCamera;
-    [SerializeField, Min(0f)] private float reticleRayLength = 5f;
+    [SerializeField, Min(0f)] private float interactionReach = 15f;
+    public float InteractionReach => interactionReach;
+    public bool IsGameplayInputBlocked => gameplayInputBlocked;
 
     public event Action OnFly;
-    /// <summary>Fired when <c>DestroyBlock</c> is performed (e.g. right mouse).</summary>
-    public event Action OnDestroyBlock;
-    /// <summary>Fired when <c>PlaceBlock</c> is performed (e.g. left mouse).</summary>
-    public event Action OnPlaceBlock;
+    /// <summary>Fired when <c>DestroyVoxel</c> is performed (left mouse).</summary>
+    public event Action OnDestroyVoxel;
+    /// <summary>Fired when <c>PlaceVoxel</c> is performed (right mouse).</summary>
+    public event Action OnPlaceVoxel;
     public event Action OnInteract;
     public event Action OnCancel;
 
@@ -38,14 +40,14 @@ public class PlayerInput : MonoBehaviour
     private InputAction _jumpAction;
     private InputAction _sprintAction;
     private InputAction _flyAction;
-    private InputAction _destroyBlockAction;
+    private InputAction _destroyVoxelAction;
+    private InputAction _placeVoxelAction;
     private InputAction _interactAction;
     private InputAction _circuitDetailsAction;
     private bool gameplayInputBlocked;
+    private readonly HashSet<object> inputBlockers = new();
     private readonly RaycastHit[] reticleHits = new RaycastHit[32];
     private readonly List<MonoBehaviour> reticleBehaviours = new List<MonoBehaviour>();
-    private int reticleHitCount;
-    private int reticleRaycastFrame = -1;
 
     private void Awake()
     {
@@ -70,17 +72,19 @@ public class PlayerInput : MonoBehaviour
         _jumpAction = _playerMap.FindAction("Jump");
         _sprintAction = _playerMap.FindAction("Sprint");
         _flyAction = _playerMap.FindAction("Fly");
-        _destroyBlockAction = _playerMap.FindAction("DestroyBlock");
+        _destroyVoxelAction = _playerMap.FindAction("DestroyVoxel");
+        _placeVoxelAction = _playerMap.FindAction("PlaceVoxel");
         _interactAction = _playerMap.FindAction("Interact");
         _circuitDetailsAction = _playerMap.FindAction("CircuitDetails");
 
         if (_flyAction != null)
             _flyAction.performed += OnFlyPerformed;
-        if (_destroyBlockAction != null)
-            _destroyBlockAction.performed += OnDestroyBlockPerformed;
+        if (_destroyVoxelAction != null)
+            _destroyVoxelAction.performed += OnDestroyVoxelPerformed;
         if (_interactAction != null)
             _interactAction.started += OnInteractStarted;
-        // PlaceBlock is polled directly via Mouse.current in Update(), no asset action needed.
+        if (_placeVoxelAction != null)
+            _placeVoxelAction.performed += OnPlaceVoxelPerformed;
     }
 
     private void OnEnable()
@@ -95,28 +99,30 @@ public class PlayerInput : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (_placeVoxelAction != null)
+            _placeVoxelAction.performed -= OnPlaceVoxelPerformed;
         if (_flyAction != null)
             _flyAction.performed -= OnFlyPerformed;
-        if (_destroyBlockAction != null)
-            _destroyBlockAction.performed -= OnDestroyBlockPerformed;
+        if (_destroyVoxelAction != null)
+            _destroyVoxelAction.performed -= OnDestroyVoxelPerformed;
         if (_interactAction != null)
             _interactAction.started -= OnInteractStarted;
     }
 
-    private void OnDestroyBlockPerformed(InputAction.CallbackContext _)
+    private void OnDestroyVoxelPerformed(InputAction.CallbackContext _)
     {
         if (gameplayInputBlocked)
             return;
 
-        OnDestroyBlock?.Invoke();
+        OnDestroyVoxel?.Invoke();
     }
 
-    private void OnPlaceBlockPerformed(InputAction.CallbackContext _)
+    private void OnPlaceVoxelPerformed(InputAction.CallbackContext _)
     {
         if (gameplayInputBlocked)
             return;
 
-        OnPlaceBlock?.Invoke();
+        OnPlaceVoxel?.Invoke();
     }
 
     private void OnFlyPerformed(InputAction.CallbackContext _)
@@ -134,10 +140,6 @@ public class PlayerInput : MonoBehaviour
 
     private void Update()
     {
-        // Poll left mouse button first, independent of action map state.
-        if (!gameplayInputBlocked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-            OnPlaceBlock?.Invoke();
-
         if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
             OnCancel?.Invoke();
 
@@ -179,10 +181,13 @@ public class PlayerInput : MonoBehaviour
             RunningPressed = false;
     }
 
-    public void SetGameplayInputBlocked(bool blocked)
+    public void SetGameplayInputBlocked(bool blocked, object owner = null)
     {
-        gameplayInputBlocked = blocked;
-        if (!blocked)
+        owner ??= this;
+        if (blocked) inputBlockers.Add(owner);
+        else inputBlockers.Remove(owner);
+        gameplayInputBlocked = inputBlockers.Count > 0;
+        if (!gameplayInputBlocked)
             return;
 
         MovementInput = Vector3.zero;
@@ -196,53 +201,43 @@ public class PlayerInput : MonoBehaviour
 
     public bool TryGetReticleTarget<T>(out T target) where T : class
     {
-        RefreshReticleHits();
         target = null;
-        float nearestDistance = float.MaxValue;
-
-        for (int i = 0; i < reticleHitCount; i++)
+        if (!TryGetReticleHit(out RaycastHit hit)) return false;
+        reticleBehaviours.Clear();
+        hit.collider.GetComponentsInParent(false, reticleBehaviours);
+        foreach (MonoBehaviour behaviour in reticleBehaviours)
         {
-            RaycastHit hit = reticleHits[i];
-            if (hit.collider == null || hit.distance >= nearestDistance)
-                continue;
-
-            reticleBehaviours.Clear();
-            hit.collider.GetComponentsInParent(false, reticleBehaviours);
-            for (int j = 0; j < reticleBehaviours.Count; j++)
-            {
-                if (reticleBehaviours[j] is not T candidate)
-                    continue;
-
-                target = candidate;
-                nearestDistance = hit.distance;
-                break;
-            }
+            if (behaviour is not T candidate) continue;
+            target = candidate;
+            return true;
         }
-
-        return target != null;
+        return false;
     }
 
-    private void RefreshReticleHits()
+    // All world actions use the nearest unobstructed hit and the same reach.
+    public bool TryGetReticleHit(out RaycastHit nearestHit)
     {
-        if (reticleRaycastFrame == Time.frameCount)
-            return;
-
-        reticleRaycastFrame = Time.frameCount;
-        if (gameplayInputBlocked)
+        nearestHit = default;
+        if (gameplayInputBlocked) return false;
+        if (reticleCamera == null) reticleCamera = Camera.main;
+        if (reticleCamera == null) return false;
+        Ray ray = new(reticleCamera.transform.position, reticleCamera.transform.forward);
+        int count = Physics.RaycastNonAlloc(ray, reticleHits, interactionReach,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        // A full buffer is unordered; never silently skip a nearer obstruction.
+        RaycastHit[] hits = count == reticleHits.Length
+            ? Physics.RaycastAll(ray, interactionReach, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+            : reticleHits;
+        if (hits != reticleHits) count = hits.Length;
+        float distance = float.PositiveInfinity;
+        for (int i = 0; i < count; i++)
         {
-            reticleHitCount = 0;
-            return;
+            RaycastHit hit = hits[i];
+            if (hit.collider == null || hit.collider.transform.IsChildOf(transform) || hit.distance >= distance) continue;
+            nearestHit = hit;
+            distance = hit.distance;
         }
-
-        if (reticleCamera == null)
-            reticleCamera = Camera.main;
-
-        reticleHitCount = reticleCamera == null ? 0 : Physics.RaycastNonAlloc(
-            new Ray(reticleCamera.transform.position, reticleCamera.transform.forward),
-            reticleHits,
-            reticleRayLength,
-            ~0,
-            QueryTriggerInteraction.Ignore);
+        return distance < float.PositiveInfinity;
     }
 
     public string GetCircuitDetailsBindingDisplayName()

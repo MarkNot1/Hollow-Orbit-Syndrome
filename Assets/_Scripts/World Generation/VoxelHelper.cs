@@ -107,9 +107,7 @@ public static class VoxelHelper
                 VoxelRuntimeData.TryGet(neighborVoxelType, out VoxelRenderInfo neighbourInfo))
             {
                 bool neighborSolid = neighbourInfo.isSolid;
-                bool neighborSmoothable = neighbourInfo.isSmoothable;
-
-                if (!neighborSolid || (neighborSmoothable && !isSmooth))
+                if (!neighborSolid)
                 {
                     meshData = GetFaceDataIn(direction, context, x, y, z, meshData, voxelType, renderType, forceCube, neighbours, solidColor);
                 }

@@ -47,6 +47,7 @@ public class Inventory : MonoBehaviour
     private bool isOpen;
 
     public bool IsOpen => isOpen;
+    public int EquippedHotbarIndex => equippedHotbarIndex;
     public IReadOnlyList<Entry> Items => items;
     public ItemSO SelectedItem => selectedItem;
     public ItemSO EquippedItem => equippedHotbarIndex < hotbarItems.Length ? hotbarItems[equippedHotbarIndex] : null;
@@ -71,8 +72,9 @@ public class Inventory : MonoBehaviour
     {
         inventoryMap?.Disable();
         if (playerInput != null) playerInput.OnInteract -= PickUp;
-        playerInput?.SetGameplayInputBlocked(false);
+        playerInput?.SetGameplayInputBlocked(false, this);
         playerInput = null;
+        if (currentHandItem != null) currentHandItem.SetActive(false);
         if (isOpen)
         {
             isOpen = false;
@@ -91,6 +93,11 @@ public class Inventory : MonoBehaviour
         Refresh();
     }
 
+    private void OnDestroy()
+    {
+        if (currentHandItem != null) Destroy(currentHandItem);
+    }
+
     private void Update()
     {
         // GameManager spawns the player after the world is ready.
@@ -100,7 +107,7 @@ public class Inventory : MonoBehaviour
             if (playerInput != null)
             {
                 playerInput.OnInteract += PickUp;
-                playerInput.SetGameplayInputBlocked(isOpen);
+                playerInput.SetGameplayInputBlocked(isOpen, this);
                 if (isOpen)
                 {
                     Cursor.lockState = CursorLockMode.None;
@@ -108,7 +115,8 @@ public class Inventory : MonoBehaviour
                 }
             }
         }
-        if (toggleAction != null && toggleAction.WasPressedThisFrame()) SetOpen(!isOpen);
+        if (toggleAction != null && toggleAction.WasPressedThisFrame() &&
+            (isOpen || playerInput == null || !playerInput.IsGameplayInputBlocked)) SetOpen(!isOpen);
         else if (isOpen && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) SetOpen(false);
         DetectLookedAtItem();
         if (isOpen)
@@ -117,13 +125,25 @@ public class Inventory : MonoBehaviour
             if (addBatteryAction != null && addBatteryAction.WasPressedThisFrame()) AddItem(Battery, 1);
         }
         HandleKeyboard();
+        if (!isOpen && (playerInput == null || !playerInput.IsGameplayInputBlocked) && Mouse.current != null)
+        {
+            float scroll = Mouse.current.scroll.ReadValue().y;
+            if (scroll != 0f) CycleHotbar(scroll > 0f ? -1 : 1);
+        }
+    }
+
+    private void LateUpdate()
+    {
+        if (currentHandItem != null)
+            currentHandItem.SetActive(!isOpen && playerInput != null && !playerInput.IsGameplayInputBlocked);
     }
 
     public void SetOpen(bool open)
     {
+        if (open && !isOpen && playerInput != null && playerInput.IsGameplayInputBlocked) return;
         isOpen = open;
         container?.SetActive(open);
-        playerInput?.SetGameplayInputBlocked(open);
+        playerInput?.SetGameplayInputBlocked(open, this);
         Cursor.lockState = open ? CursorLockMode.None : CursorLockMode.Locked;
         Cursor.visible = open;
         if (open)
@@ -154,12 +174,13 @@ public class Inventory : MonoBehaviour
         int index = FindItem(itemToAdd);
         if (index >= 0)
         {
+            if (itemToAdd.unlimited) return;
             if (amount > int.MaxValue - items[index].Amount) return;
             items[index].Add(amount);
         }
         else
         {
-            items.Add(new Entry(itemToAdd, amount));
+            items.Add(new Entry(itemToAdd, itemToAdd.unlimited ? 1 : amount));
             // Shortcuts reference the inventory; they never own another stack.
             for (int i = 0; i < hotbarItems.Length; i++)
                 if (hotbarItems[i] == null) { hotbarItems[i] = itemToAdd; break; }
@@ -171,6 +192,7 @@ public class Inventory : MonoBehaviour
     public bool RemoveItem(ItemSO item, int amount)
     {
         int index = FindItem(item);
+        if (index >= 0 && item.unlimited) return false;
         if (amount <= 0 || index < 0 || items[index].Amount < amount) return false;
         items[index].Add(-amount);
         if (items[index].Amount == 0)
@@ -199,6 +221,12 @@ public class Inventory : MonoBehaviour
         Refresh();
     }
 
+    public void CycleHotbar(int direction)
+    {
+        if (isOpen || (playerInput != null && playerInput.IsGameplayInputBlocked) || hotbarItems.Length == 0) return;
+        SelectHotbar((equippedHotbarIndex + direction % hotbarItems.Length + hotbarItems.Length) % hotbarItems.Length);
+    }
+
     public void AssignSelectedToHotbar(int index)
     {
         if (selectedItem == null || index < 0 || index >= hotbarItems.Length) return;
@@ -211,6 +239,7 @@ public class Inventory : MonoBehaviour
 
     private void HandleKeyboard()
     {
+        if (!isOpen && playerInput != null && playerInput.IsGameplayInputBlocked) return;
         Keyboard keyboard = Keyboard.current;
         if (keyboard == null) return;
         // Digit keys are contiguous in the Input System's Key enum.
@@ -234,7 +263,7 @@ public class Inventory : MonoBehaviour
 
     private void Refresh()
     {
-        for (int i = 0; i < hotbarSlots.Length; i++)
+        for (int i = 0; i < Mathf.Min(hotbarSlots.Length, hotbarItems.Length); i++)
         {
             hotbarSlots[i].Bind(this, hotbarItems[i], GetAmount(hotbarItems[i]), i);
             hotbarSlots[i].SetSelected(i == equippedHotbarIndex, equippedOpacity, normalOpacity);
@@ -287,7 +316,7 @@ public class Inventory : MonoBehaviour
 
     public bool DropItem(ItemSO item, int amount)
     {
-        if (item == null || item.itemPrefab == null || amount <= 0 || GetAmount(item) < amount) return false;
+        if (item == null || item.unlimited || item.itemPrefab == null || amount <= 0 || GetAmount(item) < amount) return false;
         Transform origin = Camera.main != null ? Camera.main.transform : playerInput != null ? playerInput.transform : null;
         if (origin == null) return false;
         GameObject dropped = Instantiate(item.itemPrefab, origin.position + origin.forward * 0.8f, Quaternion.identity);

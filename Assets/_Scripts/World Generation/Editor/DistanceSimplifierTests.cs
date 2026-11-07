@@ -370,6 +370,107 @@ public class DistanceSimplifierTests
     }
 
     [Test]
+    public void CollisionHandoff_WaitsForPlayerLayerInsteadOfSpeculativeUndergroundWork()
+    {
+        GameObject go = new GameObject("Collision handoff readiness");
+        go.SetActive(false);
+        World world = go.AddComponent<World>();
+        InvokePrivate(world, "Awake");
+        GameObject chunkObject = new GameObject("Ready collision chunk");
+        ChunkRenderer renderer = chunkObject.AddComponent<ChunkRenderer>();
+        try
+        {
+            ChunkData data = SolidChunk(2, 2, Vector3Int.zero);
+            renderer.InitializeChunk(data);
+            var preparation = renderer.ApplyMesh(DistanceSimplifier.BuildMesh(data, ChunkLodLevel.Full),
+                ChunkLodLevel.Full, data.ContentVersion, true);
+            Assert.That(renderer.TryActivateBakedCollision(preparation.leaseId, preparation.buildId,
+                preparation.contentVersion), Is.True);
+            world.worldData.chunkDictionary.Add(Vector3Int.zero, renderer);
+            SetPrivateField(world, "desiredCollision", new HashSet<Vector3Int>
+                { Vector3Int.zero, Vector3Int.down * world.chunkHeight });
+            MethodInfo ready = typeof(World).GetMethod("AreDesiredCollisionChunksReady", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That((bool)ready.Invoke(world, null), Is.True);
+            SetPrivateField(world, "streamCenterChunk", Vector3Int.down * world.chunkHeight);
+            Assert.That((bool)ready.Invoke(world, null), Is.False, "Descending must wait for underground collision.");
+            SetPrivateField(world, "streamCenterChunk", Vector3Int.zero);
+            world.worldData.chunkDictionary.Clear();
+            Assert.That((bool)ready.Invoke(world, null), Is.False, "Missing surface collision must still retain old coverage.");
+        }
+        finally
+        {
+            world.OnDisable();
+            Object.DestroyImmediate(chunkObject);
+            Object.DestroyImmediate(go);
+        }
+    }
+
+    [Test]
+    public void MixedSolidMaterials_DoNotCreateBuriedCollisionFaces()
+    {
+        voxelData.textureDataList.Find(data => data.voxelType == VoxelType.Rock).isSmoothable = false;
+        VoxelRuntimeData.Capture(voxelData);
+        var chunks = new Dictionary<Vector3Int, ChunkData>();
+        for (int y = -1; y <= 1; y++)
+            for (int x = -1; x <= 1; x++)
+                for (int z = -1; z <= 1; z++)
+                {
+                    Vector3Int key = new Vector3Int(x * 4, y * 4, z * 4);
+                    chunks.Add(key, SolidChunk(4, 4, key));
+                }
+        ChunkData center = chunks[Vector3Int.zero];
+        center.SetVoxel(1, 1, 1, VoxelType.Infected_Growth);
+        MeshData buried = DistanceSimplifier.BuildMesh(new ChunkMeshContext(center, chunks), ChunkLodLevel.Full, true);
+        Assert.That(buried.vertices, Is.Empty);
+        Assert.That(buried.colliderVertices, Is.Empty);
+        center.SetVoxel(1, 2, 1, VoxelType.Air);
+        MeshData exposed = DistanceSimplifier.BuildMesh(new ChunkMeshContext(center, chunks), ChunkLodLevel.Full, true);
+        Assert.That(exposed.colliderVertices, Is.Not.Empty);
+    }
+
+    [Test]
+    public void UndergroundMeshing_WaitsForCoveringDataAndPreservesExcavatedSurfaces()
+    {
+        GameObject go = new GameObject("Underground mesh readiness");
+        go.SetActive(false);
+        World world = go.AddComponent<World>();
+        world.chunkSize = world.chunkHeight = 4;
+        InvokePrivate(world, "Awake");
+        Vector3Int underground = new Vector3Int(0, -4, 0);
+        MethodInfo ready = typeof(World).GetMethod("HasMeshHalo", BindingFlags.Instance | BindingFlags.NonPublic);
+        var chunks = world.worldData.chunkDataDictionary;
+        try
+        {
+            for (int x = -1; x <= 1; x++)
+                for (int z = -1; z <= 1; z++)
+                {
+                    Vector3Int key = underground + new Vector3Int(x * 4, 0, z * 4);
+                    chunks.Add(key, ColumnChunk(4, 4, key, 3));
+                }
+            Assert.That((bool)ready.Invoke(world, new object[] { underground }), Is.False,
+                "Missing covering data must not be treated as air and baked into a hidden floor.");
+            for (int x = -1; x <= 1; x++)
+                for (int z = -1; z <= 1; z++)
+                {
+                    Vector3Int key = new Vector3Int(x * 4, 0, z * 4);
+                    chunks.Add(key, ColumnChunk(4, 4, key, 3));
+                }
+            Assert.That((bool)ready.Invoke(world, new object[] { underground }), Is.True);
+            MeshData buried = DistanceSimplifier.BuildMesh(new ChunkMeshContext(chunks[underground], chunks), ChunkLodLevel.Full, true);
+            Assert.That(buried.colliderVertices, Is.Empty);
+            chunks[Vector3Int.zero].SetVoxel(1, 0, 1, VoxelType.Air);
+            MeshData excavated = DistanceSimplifier.BuildMesh(new ChunkMeshContext(chunks[underground], chunks), ChunkLodLevel.Full, true);
+            Assert.That(excavated.colliderVertices, Is.Not.Empty,
+                "Digging must still expose a real underground collider.");
+        }
+        finally
+        {
+            world.OnDisable();
+            Object.DestroyImmediate(go);
+        }
+    }
+
+    [Test]
     public void RendererReset_ClearsLodCollisionAndContentState()
     {
         GameObject go = new GameObject("Chunk Renderer Test");
