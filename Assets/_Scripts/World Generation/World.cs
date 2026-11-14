@@ -33,6 +33,21 @@ public partial class World : MonoBehaviour
 
     public UnityEvent OnWorldCreated, OnNewChunksGenerated;
     public event Action<Vector3Int, ChunkRenderer> OnChunkRendered;
+    public event Action OnChunkVisibilityChanged;
+
+    public bool IsAreaRendered(Bounds bounds)
+    {
+        if (worldData.chunkDictionary == null) return false;
+        Vector3Int min = WorldDataHelper.ChunkPositionFromVoxelCoords(this, VoxelMetrics.WorldToVoxelCoord(bounds.min));
+        Vector3Int max = WorldDataHelper.ChunkPositionFromVoxelCoords(this, VoxelMetrics.WorldToVoxelCoord(bounds.max));
+        // Surface chunks also own the airspace above them.
+        min.y = Mathf.Min(min.y, 0);
+        max.y = Mathf.Min(max.y, 0);
+        foreach (Vector3Int key in worldData.chunkDictionary.Keys)
+            if (key.x >= min.x && key.x <= max.x && key.y >= min.y && key.y <= max.y && key.z >= min.z && key.z <= max.z)
+                return true;
+        return false;
+    }
 
     public WorldData worldData { get; private set; }
     public SpecialVoxelManager SpecialVoxels { get; private set; }

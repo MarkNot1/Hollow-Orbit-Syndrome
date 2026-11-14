@@ -21,7 +21,7 @@ internal sealed class FramePlacementPreview : System.IDisposable
         renderer.receiveShadows = false;
     }
 
-    public void Show(StructureData data, Vector3 position, Quaternion rotation, bool valid)
+    public void Show(StructureData data, Vector3 position, Quaternion rotation, bool valid, SpecialPrefabDatabaseSO prefabs = null)
     {
         if (blueprint != data)
         {
@@ -36,6 +36,23 @@ internal sealed class FramePlacementPreview : System.IDisposable
             mesh.Clear();
             mesh.SetVertices(geometry.vertices);
             mesh.SetTriangles(geometry.triangles, 0);
+            if (prefabs != null && data.prefabs.Count > 0)
+            {
+                Mesh hull = Object.Instantiate(mesh);
+                var pieces = new List<CombineInstance> { new() { mesh = hull, transform = Matrix4x4.identity } };
+                foreach (var record in data.prefabs)
+                {
+                    prefabs.TryGetPrefab(record.prefabId, out SpecialPrefabData prefab);
+                    Matrix4x4 placement = Matrix4x4.TRS(record.position, record.rotation, record.scale);
+                    foreach (MeshFilter filter in prefab.Prefab.GetComponentsInChildren<MeshFilter>())
+                        if (filter.sharedMesh != null)
+                            for (int submesh = 0; submesh < filter.sharedMesh.subMeshCount; submesh++)
+                                pieces.Add(new CombineInstance { mesh = filter.sharedMesh, subMeshIndex = submesh,
+                                    transform = placement * prefab.Prefab.transform.worldToLocalMatrix * filter.transform.localToWorldMatrix });
+                }
+                mesh.CombineMeshes(pieces.ToArray());
+                VoxelStructure.Release(hull);
+            }
             mesh.RecalculateBounds();
         }
         material.color = valid ? new Color(0.2f, 1f, 0.55f, 0.4f) : new Color(1f, 0.15f, 0.1f, 0.4f);

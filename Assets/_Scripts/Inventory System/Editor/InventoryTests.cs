@@ -150,6 +150,43 @@ public sealed class InventoryTests
     }
 
     [Test]
+    public void DevShipTabVirtualizesRowsAndStartsAndCancelsCopyPlacement()
+    {
+        VoxelRuntimeData.Capture(AssetDatabase.LoadAssetAtPath<VoxelDataSO>("Assets/_Scripts/World Generation/VoxelData.asset"));
+        Inventory inventory = OpenScene(out InventoryMenu menu, out Canvas canvas);
+        StructureSystem structures = preview.GetRootGameObjects().SelectMany(go => go.GetComponentsInChildren<StructureSystem>(true)).Single();
+        typeof(InventoryMenu).GetField("structures", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(menu, structures);
+        menu.ShowDevTab(true);
+        var ships = new List<StructureData>();
+        for (int i = 0; i < 300; i++)
+        {
+            StructureData ship = FrameBlueprint.Create(true);
+            ship.id = System.Guid.NewGuid().ToString("N");
+            ship.name = "Dev Ship " + i;
+            ships.Add(ship);
+        }
+        typeof(InventoryMenu).GetField("ships", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(menu, ships);
+        menu.Refresh();
+        Assert.That(Get<List<Slot>>(menu, "rows").Count, Is.LessThan(30));
+        Assert.That(Get<Button>(menu, "equipButton").GetComponentInChildren<TMP_Text>().text, Is.EqualTo("PLACE COPY"));
+        menu.MoveSelection(299);
+        Assert.That(Get<TextMeshProUGUI>(menu, "itemTitle").text, Is.EqualTo("Dev Ship 299"));
+        Get<TextMeshProUGUI>(menu, "itemDescription").ForceMeshUpdate();
+        Assert.That(Get<TextMeshProUGUI>(menu, "itemDescription").isTextTruncated, Is.False);
+        Assert.That(Get<ScrollRect>(menu, "scroll").content.anchoredPosition.y, Is.GreaterThan(0));
+        Get<Button>(menu, "equipButton").onClick.Invoke();
+        Assert.That(inventory.IsOpen, Is.False);
+        Assert.That(structures.SelectedShip.id, Is.EqualTo(ships[299].id));
+        inventory.SelectHotbar(0);
+        Assert.That(structures.SelectedShip, Is.Null);
+        inventory.SetOpen(true);
+        menu.ShowDevTab(false);
+        Assert.That(Get<Button>(menu, "equipButton").GetComponentInChildren<TMP_Text>().text, Is.EqualTo("EQUIP"));
+        Assert.That(menu.IsDevTab, Is.False);
+        Assert.That(inventory.container.GetComponentsInChildren<Button>(true).Any(b => b.name == "DEV SHIPS"), Is.True);
+    }
+
+    [Test]
     public void MenuBlocksGameplayAndReleasesItWhenDisabled()
     {
         Inventory inventory = NewInventory();

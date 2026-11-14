@@ -6,6 +6,8 @@ Shader "HollowOrbit/Voxel Atlas Lit"
         [MainColor] _BaseColor("Base Color", Color) = (1,1,1,1)
         _VoxelAtlasTileSize("Atlas Tile Size", Vector) = (0.0625,0.0625,0,0)
         _VoxelAtlasInset("Atlas Inset", Float) = 0.001
+        _VoxelTopBottom("Item Top / Bottom Tiles", Vector) = (0,0,0,0)
+        _VoxelSide("Item Side Tile", Vector) = (0,0,0,0)
     }
 
     SubShader
@@ -21,7 +23,21 @@ Shader "HollowOrbit/Voxel Atlas Lit"
             half4 _BaseColor;
             float4 _VoxelAtlasTileSize;
             float _VoxelAtlasInset;
+            float4 _VoxelTopBottom;
+            float4 _VoxelSide;
         CBUFFER_END
+
+        float2 AtlasUV(float2 uv, float3 normalOS)
+        {
+            #if defined(_VOXEL_ITEM)
+                float2 tile = normalOS.y > 0.5 ? _VoxelTopBottom.xy :
+                    normalOS.y < -0.5 ? _VoxelTopBottom.zw : _VoxelSide.xy;
+                return tile * _VoxelAtlasTileSize.xy + _VoxelAtlasInset +
+                    uv * (_VoxelAtlasTileSize.xy - 2.0 * _VoxelAtlasInset);
+            #else
+                return uv;
+            #endif
+        }
 
         half4 SampleAtlas(float2 uv, float2 tiledUv)
         {
@@ -45,6 +61,7 @@ Shader "HollowOrbit/Voxel Atlas Lit"
             HLSLPROGRAM
             #pragma target 3.5
             #pragma vertex Vert
+            #pragma shader_feature_local_vertex _ _VOXEL_ITEM
             #pragma fragment Frag
             #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -77,7 +94,7 @@ Shader "HollowOrbit/Voxel Atlas Lit"
                 VertexPositionInputs positions = GetVertexPositionInputs(input.positionOS.xyz);
                 output.positionCS = positions.positionCS;
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-                output.uv = input.uv;
+                output.uv = AtlasUV(input.uv, input.normalOS);
                 output.tiledUv = input.tiledUv;
                 output.fogFactor = ComputeFogFactor(positions.positionCS.z);
                 output.color = input.color;
@@ -130,6 +147,7 @@ Shader "HollowOrbit/Voxel Atlas Lit"
             HLSLPROGRAM
             #pragma target 3.5
             #pragma vertex ShadowVert
+            #pragma shader_feature_local_vertex _ _VOXEL_ITEM
             #pragma fragment ShadowFrag
             #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -171,7 +189,7 @@ Shader "HollowOrbit/Voxel Atlas Lit"
                 #endif
                 ShadowVaryings output;
                 output.positionCS = positionCS;
-                output.uv = input.uv;
+                output.uv = AtlasUV(input.uv, input.normalOS);
                 output.tiledUv = input.tiledUv;
                 return output;
             }

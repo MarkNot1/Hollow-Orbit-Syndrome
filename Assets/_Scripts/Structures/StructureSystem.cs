@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-public sealed class StructureSystem : MonoBehaviour
+public sealed partial class StructureSystem : MonoBehaviour
 {
     [SerializeField] private Material voxelMaterial;
     [SerializeField] private SpecialPrefabDatabaseSO prefabDatabase;
     [SerializeField] private Material framePreviewMaterial;
+    [SerializeField] private World world;
+    private readonly List<(StructureData data, Bounds bounds)> unloaded = new();
+    private readonly List<VoxelStructure> loaded = new();
     private static readonly Collider[] Overlaps = new Collider[64];
     private TextAsset cachedBlueprint;
     private StructureData blueprintData;
@@ -15,6 +18,55 @@ public sealed class StructureSystem : MonoBehaviour
     private string status;
     private float statusUntil;
     public string SavePath => Path.Combine(Application.persistentDataPath, "Structures", "structures.json");
+
+    private void OnEnable() => SetStreamingWorld(world != null ? world : FindFirstObjectByType<World>());
+
+    public void SetStreamingWorld(World value)
+    {
+        if (world != null) world.OnChunkVisibilityChanged -= RefreshStreaming;
+        world = value;
+        if (world != null) world.OnChunkVisibilityChanged += RefreshStreaming;
+        RefreshStreaming();
+    }
+
+    public void RefreshStreaming()
+    {
+        if (world == null || world.worldData.chunkDictionary == null) return;
+        GetComponentsInChildren(false, loaded);
+        foreach (VoxelStructure ship in loaded)
+        {
+            if (world.IsAreaRendered(ship.WorldBounds())) continue;
+            try
+            {
+                StructureData data = ship.Capture(false);
+                unloaded.Add((data, data.WorldBounds()));
+                ship.Unload();
+            }
+            catch (Exception error) { ShowStatus("Ship unload failed: " + error.Message); }
+        }
+        loaded.Clear();
+        for (int i = unloaded.Count - 1; i >= 0; i--)
+        {
+            var record = unloaded[i];
+            if (!world.IsAreaRendered(record.bounds)) continue;
+            GameObject root = new(record.data.name);
+            root.SetActive(false);
+            root.transform.SetParent(transform, false);
+            VoxelStructure ship = root.AddComponent<VoxelStructure>();
+            try
+            {
+                ship.Configure(voxelMaterial, prefabDatabase);
+                ship.Restore(record.data);
+                root.SetActive(true);
+                unloaded.RemoveAt(i);
+            }
+            catch (Exception error)
+            {
+                ship.Unload();
+                ShowStatus("Ship reload failed: " + error.Message);
+            }
+        }
+    }
 
     public VoxelStructure CreateStructure(string structureName, Vector3 position, Quaternion rotation)
     {
@@ -63,6 +115,13 @@ public sealed class StructureSystem : MonoBehaviour
             catch (Exception error) { ShowStatus(error.Message); }
         }
         if (blueprintData == null) return false;
+        return TryGetPlacement(hit, blueprintData, false, out placement);
+    }
+
+    private bool TryGetPlacement(RaycastHit hit, StructureData data, bool copy, out BlueprintPlacement placement)
+    {
+        placement = default;
+        if (hit.collider == null || data == null || data.voxels.Count == 0) return false;
         VoxelStructure structure = hit.collider.GetComponent<StructureChunk>()?.Structure;
         Vector3Int surface, normal, destination;
         bool destinationValid = true;
@@ -81,8 +140,8 @@ public sealed class StructureSystem : MonoBehaviour
             destination = surface + normal;
         }
 
-        Vector3Int min = blueprintData.voxels[0].position, max = min;
-        foreach (var voxel in blueprintData.voxels)
+        Vector3Int min = copy ? shipMin : data.voxels[0].position, max = copy ? shipMax : min;
+        if (!copy) foreach (var voxel in data.voxels)
         {
             min = Vector3Int.Min(min, voxel.position);
             max = Vector3Int.Max(max, voxel.position);
@@ -97,12 +156,14 @@ public sealed class StructureSystem : MonoBehaviour
             position = structure.transform.TransformPoint(position);
             rotation = structure.transform.rotation;
         }
-        bool valid = destinationValid && (structure == null) == blueprintData.hasMasterFrame;
-        foreach (var voxel in blueprintData.voxels)
+        bool valid = destinationValid && (copy || (structure == null) == data.hasMasterFrame);
+        bool clear = copy && valid && IsSpaceFree(position + rotation * ((Vector3)(min + max) * (VoxelMetrics.Size * .5f)),
+            rotation, (Vector3)(max - min + Vector3Int.one) * (VoxelMetrics.Size * .5f) - Vector3.one * .005f);
+        foreach (var voxel in data.voxels)
         {
-            if (!valid) break;
-            valid = structure != null ? structure.CanOccupy(voxel.position + offset) :
-                IsSpaceFree(position + (Vector3)voxel.position * VoxelMetrics.Size, rotation,
+            if (!valid || clear) break;
+            valid = structure != null && !copy ? structure.CanOccupy(voxel.position + offset) :
+                IsSpaceFree(position + rotation * ((Vector3)voxel.position * VoxelMetrics.Size), rotation,
                     Vector3.one * (VoxelMetrics.Size * 0.5f - 0.005f));
         }
         placement = new BlueprintPlacement { structure = structure, offset = offset,
@@ -119,14 +180,20 @@ public sealed class StructureSystem : MonoBehaviour
     }
 
     public void HideBlueprintPreview() => preview?.Hide();
-    private void OnDisable() => HideBlueprintPreview();
+    private void OnDisable()
+    {
+        HideBlueprintPreview();
+        if (world != null) world.OnChunkVisibilityChanged -= RefreshStreaming;
+    }
     private void OnDestroy() => preview?.Dispose();
 
     public string CaptureJson()
     {
         StructureSaveData save = new();
         foreach (VoxelStructure structure in GetComponentsInChildren<VoxelStructure>())
-            save.structures.Add(structure.Capture());
+            if (structure.HasMasterFrame) save.structures.Add(structure.Capture());
+        foreach (var record in unloaded)
+            if (record.data.hasMasterFrame) save.structures.Add(record.data.ConnectedCopy(out _));
         save.structures.Sort((a, b) => string.CompareOrdinal(a.id, b.id));
         return JsonUtility.ToJson(save, true);
     }
@@ -144,6 +211,7 @@ public sealed class StructureSystem : MonoBehaviour
                 throw new InvalidDataException("Structure IDs must be present and unique.");
         }
         VoxelStructure[] previous = GetComponentsInChildren<VoxelStructure>();
+        var distant = new List<(StructureData data, Bounds bounds)>();
         GameObject staging = new("Loading structures");
         staging.transform.SetParent(transform, false);
         staging.SetActive(false);
@@ -151,27 +219,49 @@ public sealed class StructureSystem : MonoBehaviour
         {
             foreach (StructureData data in save.structures)
             {
+                Bounds bounds = data.WorldBounds();
+                if (world != null && !world.IsAreaRendered(bounds))
+                {
+                    distant.Add((data, bounds));
+                    continue;
+                }
                 GameObject root = new(data.name);
                 root.transform.SetParent(staging.transform, false);
                 VoxelStructure structure = root.AddComponent<VoxelStructure>();
                 structure.Configure(voxelMaterial, prefabDatabase);
                 structure.Restore(data);
             }
-            // Old structures remain intact until every prefab and its state has loaded.
+            // Commit after nearby structures load successfully; distant ships remain data only.
+            unloaded.Clear();
+            unloaded.AddRange(distant);
             foreach (VoxelStructure old in previous)
-            {
-                old.gameObject.SetActive(false);
-                VoxelStructure.Release(old.gameObject);
-            }
+                old.Unload();
             while (staging.transform.childCount > 0)
                 staging.transform.GetChild(0).SetParent(transform, true);
         }
-        finally { VoxelStructure.Release(staging); }
+        finally
+        {
+            foreach (VoxelStructure ship in staging.GetComponentsInChildren<VoxelStructure>(true)) ship.Unload();
+            VoxelStructure.Release(staging);
+        }
     }
 
     public void SaveToFile(string path)
     {
         string json = CaptureJson();
+        var ships = ReadSavedShips(path);
+        foreach (StructureData ship in JsonUtility.FromJson<StructureSaveData>(json).structures)
+        {
+            int index = ships.FindIndex(s => s.id == ship.id);
+            if (index < 0) ships.Add(ship); else ships[index] = ship;
+        }
+        WriteSnapshot(path + ".library", JsonUtility.ToJson(new StructureSaveData { structures = ships }, true));
+        WriteSnapshot(path, json);
+        if (SelectedShip != null) SelectSavedShip(ships.Find(s => s.id == SelectedShip.id));
+    }
+
+    private static void WriteSnapshot(string path, string json)
+    {
         string fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
         string temporary = fullPath + ".tmp";

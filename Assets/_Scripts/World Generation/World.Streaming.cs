@@ -616,6 +616,7 @@ public partial class World
             Stopwatch timer = Stopwatch.StartNew();
             int uploaded = 0;
             bool appliedAny = false;
+            bool visibilityChanged = false;
             while (readyMeshes.Count > 0 && uploaded < meshUploadsPerFrame)
             {
                 int last = readyMeshes.Count - 1;
@@ -636,6 +637,7 @@ public partial class World
                 bool created = !worldData.chunkDictionary.TryGetValue(result.position, out ChunkRenderer renderer);
                 if (created)
                 {
+                    visibilityChanged = true;
                     renderer = worldRenderer.RenderChunk(
                         worldData,
                         result.position);
@@ -661,7 +663,10 @@ public partial class World
                     break;
             }
             if (appliedAny)
+            {
                 OnNewChunksGenerated?.Invoke();
+                if (visibilityChanged) OnChunkVisibilityChanged?.Invoke();
+            }
         }
     }
 
@@ -1040,6 +1045,7 @@ public partial class World
                 SpecialVoxels.HideSpecialPrefabsForChunk(position);
             WorldDataHelper.RemoveChunk(this, position);
         }
+        if (chunksToRemove.Count > 0) OnChunkVisibilityChanged?.Invoke();
 
         var dataToRemove = new List<Vector3Int>();
         foreach (KeyValuePair<Vector3Int, ChunkData> pair in worldData.chunkDataDictionary)

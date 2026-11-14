@@ -33,7 +33,11 @@ public sealed class StructureTests
     public void TearDown()
     {
         foreach (var value in objects.AsEnumerable().Reverse())
-            if (value != null) UnityEngine.Object.DestroyImmediate(value);
+            if (value != null)
+            {
+                if (value is GameObject root) root.GetComponent<World>()?.OnDisable();
+                UnityEngine.Object.DestroyImmediate(value);
+            }
         objects.Clear();
     }
 
@@ -97,7 +101,7 @@ public sealed class StructureTests
         Assert.That(structure.transform.position, Is.EqualTo(TestPosition));
         foreach (StructureVoxelData voxel in frame.voxels)
             Assert.That(structure.SetVoxel(voxel.position, VoxelType.Air), Is.False);
-        Assert.That(structure.SetVoxel(interior, VoxelType.Air), Is.True);
+        Assert.That(structure.GetVoxel(interior), Is.EqualTo(VoxelType.Air));
         Assert.That(structure.SetVoxel(extension, VoxelType.Air), Is.True);
         Assert.That(structure.VoxelCount, Is.EqualTo(56));
     }
@@ -136,6 +140,9 @@ public sealed class StructureTests
         VoxelStructure structure = system.GetComponentInChildren<VoxelStructure>();
         Assert.That(structure.HasMasterFrame, Is.True);
         Assert.That(structure.transform.position, Is.EqualTo(TestPosition + Vector3.up * VoxelMetrics.Size));
+        StructureData saved = JsonUtility.FromJson<StructureSaveData>(system.CaptureJson()).structures.Single();
+        Assert.That(saved.voxels.Count, Is.EqualTo(56));
+        Assert.That(saved.voxels.Any(v => v.position == Vector3Int.down), Is.False, "Touching terrain must not join the ship.");
         hit = Hit(structure, new Vector3Int(0, 5, 0), Vector3Int.up);
         Assert.That(system.TryPlaceBlueprint(hit, MasterFrame), Is.False);
         Assert.That(system.TryPlaceBlueprint(hit, Frame), Is.True);
@@ -163,21 +170,84 @@ public sealed class StructureTests
     }
 
     [Test]
+    public void StructuresWithoutAMasterFrameAreNotSaved()
+    {
+        VoxelStructure loose = NewStructure();
+        loose.SetVoxel(Vector3Int.zero, VoxelType.Metal);
+        Assert.That(JsonUtility.FromJson<StructureSaveData>(system.CaptureJson()).structures, Is.Empty);
+        Assert.That(loose.VoxelCount, Is.EqualTo(1));
+    }
+
+    [TestCase(-1, 0, 0)]
+    [TestCase(1, 0, 0)]
+    [TestCase(0, -1, 0)]
+    [TestCase(0, 1, 0)]
+    [TestCase(0, 0, -1)]
+    [TestCase(0, 0, 1)]
+    public void SaveFollowsFaceConnectionsAcrossChunksAndRechecksBrokenBridges(int x, int y, int z)
+    {
+        VoxelStructure ship = NewShip();
+        ship.transform.rotation = Quaternion.Euler(15, 70, 25);
+        Vector3Int direction = new(x, y, z);
+        Vector3Int start = x + y + z > 0 ? new Vector3Int(5, 5, 5) : Vector3Int.zero;
+        for (int i = 1; i <= 20; i++) ship.SetVoxel(start + direction * i, VoxelType.Window);
+        // Same-chunk floating voxel, edge-only contact, and corner-only contact.
+        foreach (Vector3Int p in new[] { new Vector3Int(2, 2, 2), new Vector3Int(-1, 5, 6), new Vector3Int(-1, -1, -1) })
+            ship.SetVoxel(p, VoxelType.Metal);
+        Assert.That(ship.Capture().voxels.Count, Is.EqualTo(76));
+        ship.SetVoxel(start + direction * 2, VoxelType.Air);
+        Assert.That(ship.Capture().voxels.Count, Is.EqualTo(57));
+        Assert.That(ship.VoxelCount, Is.EqualTo(78), "Saving must not delete detached voxels in the scene.");
+        ship.SetVoxel(start + direction * 2, VoxelType.Window);
+        string json = system.CaptureJson();
+        system.RestoreJson(json);
+        ship = system.GetComponentInChildren<VoxelStructure>();
+        Assert.That(ship.VoxelCount, Is.EqualTo(76));
+        Assert.That(ship.GetVoxel(start + direction * 20), Is.EqualTo(VoxelType.Window));
+        Assert.That(system.CaptureJson(), Is.EqualTo(json));
+    }
+
+    [Test]
+    public void DetachedAttachmentsAreSkippedAndAnAlternateConnectionKeepsThem()
+    {
+        VoxelStructure ship = NewShip();
+        for (int x = -1; x >= -3; x--) ship.SetVoxel(new Vector3Int(x, 0, 0), VoxelType.Metal);
+        ship.RebuildMeshes();
+        Assert.That(ship.TryPlacePrefab(Hit(ship, Vector3Int.zero, Vector3Int.back), "Circuit"), Is.True);
+        Assert.That(ship.TryPlacePrefab(Hit(ship, Vector3Int.left * 3, Vector3Int.back), "Circuit"), Is.True);
+        // Attachment membership is independent of the circuit-state round-trip tested below.
+        foreach (StructureAttachment attachment in ship.Attachments)
+            UnityEngine.Object.DestroyImmediate(attachment.GetComponent<CircuitStructureState>());
+        Assert.That(ship.Capture().prefabs.Count, Is.EqualTo(2));
+        ship.SetVoxel(Vector3Int.left * 2, VoxelType.Air);
+        StructureData detached = ship.Capture();
+        Assert.That(detached.prefabs.Single().surfaceVoxel, Is.EqualTo(Vector3Int.zero));
+        Assert.That(ship.Attachments.Count, Is.EqualTo(2));
+        StructureSystem.Validate(detached, prefabs);
+        for (int x = -1; x >= -3; x--) ship.SetVoxel(new Vector3Int(x, 1, 0), VoxelType.Metal);
+        Assert.That(ship.Capture().prefabs.Count, Is.EqualTo(2));
+        for (int x = -1; x >= -3; x--) ship.SetVoxel(new Vector3Int(x, 1, 0), VoxelType.Air);
+        system.RestoreJson(system.CaptureJson());
+        ship = system.GetComponentInChildren<VoxelStructure>();
+        Assert.That(ship.Attachments.Count, Is.EqualTo(1));
+        Assert.That(ship.GetVoxel(Vector3Int.left * 3), Is.EqualTo(VoxelType.Air));
+    }
+
+    [Test]
     public void IndependentRotatedGridsRoundTripWithStableIdsAndEditsOutsideTheFrame()
     {
-        VoxelStructure first = NewStructure();
+        VoxelStructure first = NewShip();
         first.transform.rotation = Quaternion.Euler(15, 70, 25);
-        first.SetVoxel(new Vector3Int(-18, 7, 42), VoxelType.Dark_Ship_Metal);
-        first.SetVoxel(Vector3Int.zero, VoxelType.Infected_Growth);
-        VoxelStructure second = NewStructure();
+        for (int x = -1; x >= -18; x--) first.SetVoxel(new Vector3Int(x, 0, 0), VoxelType.Dark_Ship_Metal);
+        VoxelStructure second = NewShip();
         second.transform.position += Vector3.right * 20;
-        second.SetVoxel(Vector3Int.zero, VoxelType.Metal);
+        second.SetVoxel(Vector3Int.left, VoxelType.Metal);
         string id = first.Id;
         string json = system.CaptureJson();
         system.RestoreJson(json);
         Assert.That(system.CaptureJson(), Is.EqualTo(json));
         VoxelStructure restored = system.GetComponentsInChildren<VoxelStructure>().Single(s => s.Id == id);
-        Assert.That(restored.GetVoxel(new Vector3Int(-18, 7, 42)), Is.EqualTo(VoxelType.Dark_Ship_Metal));
+        Assert.That(restored.GetVoxel(new Vector3Int(-18, 0, 0)), Is.EqualTo(VoxelType.Dark_Ship_Metal));
         Assert.That(restored.transform.position, Is.EqualTo(TestPosition));
         Assert.That(Quaternion.Angle(restored.transform.rotation, Quaternion.Euler(15, 70, 25)), Is.LessThan(0.01f));
     }
@@ -299,8 +369,6 @@ public sealed class StructureTests
         structure.SetVoxel(cell + Vector3Int.right, VoxelType.Window);
         structure.RebuildMeshes();
         Assert.That(VertexCount(structure), Is.EqualTo(40));
-        system.RestoreJson(system.CaptureJson());
-        structure = system.GetComponentInChildren<VoxelStructure>();
         Assert.That(structure.GetVoxel(cell), Is.EqualTo(VoxelType.Window));
         Assert.That(structure.SetVoxel(cell, VoxelType.Air), Is.True);
         structure.RebuildMeshes();
@@ -327,8 +395,7 @@ public sealed class StructureTests
     [Test]
     public void JsonValidationRejectsBadDataBeforeReplacingExistingStructures()
     {
-        VoxelStructure structure = NewStructure();
-        structure.SetVoxel(Vector3Int.zero, VoxelType.Metal);
+        VoxelStructure structure = NewShip();
         string original = system.CaptureJson();
         StructureSaveData save = JsonUtility.FromJson<StructureSaveData>(original);
         save.structures[0].voxels.Add(save.structures[0].voxels[0]);
@@ -374,20 +441,20 @@ public sealed class StructureTests
         string path = Path.Combine(Path.GetTempPath(), "structure-" + Guid.NewGuid().ToString("N") + ".json");
         try
         {
-            VoxelStructure structure = NewStructure();
-            structure.SetVoxel(Vector3Int.zero, VoxelType.Dark_Ship_Metal);
+            VoxelStructure structure = NewShip();
+            structure.SetVoxel(Vector3Int.left, VoxelType.Dark_Ship_Metal);
             system.SaveToFile(path);
             string original = File.ReadAllText(path);
-            structure.SetVoxel(Vector3Int.up, VoxelType.Metal);
+            structure.SetVoxel(Vector3Int.left + Vector3Int.up, VoxelType.Metal);
             system.SaveToFile(path);
             Assert.That(File.ReadAllText(path + ".bak"), Is.EqualTo(original));
-            structure.SetVoxel(Vector3Int.right, VoxelType.Metal);
+            structure.SetVoxel(Vector3Int.left * 2, VoxelType.Metal);
             system.LoadFromFile(path);
-            Assert.That(system.GetComponentInChildren<VoxelStructure>().VoxelCount, Is.EqualTo(2));
+            Assert.That(system.GetComponentInChildren<VoxelStructure>().VoxelCount, Is.EqualTo(58));
         }
         finally
         {
-            foreach (string suffix in new[] { "", ".bak", ".tmp" })
+            foreach (string suffix in new[] { "", ".bak", ".tmp", ".library", ".library.bak", ".library.tmp" })
                 if (File.Exists(path + suffix)) File.Delete(path + suffix);
         }
     }
@@ -408,11 +475,11 @@ public sealed class StructureTests
         SetReference(puzzles, "objectPlacer", placer);
         SetReference(puzzles, "wireSystem", wires);
         placer.SetWireSystem(wires);
-        VoxelStructure structure = NewStructure();
+        VoxelStructure structure = NewShip();
         structure.transform.rotation = Quaternion.Euler(0, 35, 0);
-        structure.SetVoxel(Vector3Int.zero, VoxelType.Dark_Ship_Metal);
+        structure.SetVoxel(Vector3Int.left, VoxelType.Dark_Ship_Metal);
         structure.RebuildMeshes();
-        Assert.That(structure.TryPlacePrefab(Hit(structure, Vector3Int.zero, Vector3Int.forward), "Circuit"), Is.True);
+        Assert.That(structure.TryPlacePrefab(Hit(structure, Vector3Int.left, Vector3Int.forward), "Circuit"), Is.True);
         StructureAttachment attachment = structure.Attachments.Single();
         SpecialPrefabInteractable circuit = attachment.GetComponent<SpecialPrefabInteractable>();
         Assert.That(Vector3.Dot(circuit.GetPreferredViewDirection(), structure.transform.forward), Is.GreaterThan(0.999f));
@@ -426,6 +493,14 @@ public sealed class StructureTests
         string json = system.CaptureJson();
         system.RestoreJson(json);
         VoxelStructure restored = system.GetComponentInChildren<VoxelStructure>();
+        World world = StreamingWorld();
+        system.SetStreamingWorld(world);
+        Assert.That(restored == null, Is.True);
+        Assert.That(JsonUtility.FromJson<StructureSaveData>(system.CaptureJson()).structures[0].prefabs[0].state,
+            Is.EqualTo(JsonUtility.FromJson<StructureSaveData>(json).structures[0].prefabs[0].state));
+        world.worldData.chunkDictionary[SurfaceChunk(world, TestPosition)] = null;
+        NotifyStreaming(world);
+        restored = system.GetComponentInChildren<VoxelStructure>();
         Assert.That(restored.Attachments.Single().Data.id, Is.EqualTo(JsonUtility.FromJson<StructureSaveData>(json).structures[0].prefabs[0].id));
         var components = restored.GetComponentsInChildren<PlacedCircuitComponent>().OrderBy(c => c.GridPosition.x).ToArray();
         Assert.That(components.Length, Is.EqualTo(2));
@@ -439,8 +514,149 @@ public sealed class StructureTests
         Assert.That(Vector3.Distance(after.prefabs[0].position, before.prefabs[0].position), Is.LessThan(0.0001f));
         Assert.That(Quaternion.Angle(after.prefabs[0].rotation, before.prefabs[0].rotation), Is.LessThan(0.01f));
         Assert.That(placement.ActiveBoard, Is.Null);
-        restored.SetVoxel(Vector3Int.zero, VoxelType.Air);
+        restored.SetVoxel(Vector3Int.left, VoxelType.Air);
         Assert.That(restored.Attachments, Is.Empty);
+    }
+
+    [Test]
+    public void StreamingReleasesMeshesAndPreservesUnsavedVoxelsAndDistantSaves()
+    {
+        VoxelStructure ship = NewShip();
+        ship.SetVoxel(Vector3Int.left, VoxelType.Window);
+        ship.SetVoxel(new Vector3Int(2, 2, 2), VoxelType.Metal); // Detached: retain in memory, exclude from saves.
+        ship.RebuildMeshes();
+        Mesh mesh = ship.GetComponentInChildren<MeshFilter>().sharedMesh;
+        string json = system.CaptureJson();
+        World world = StreamingWorld();
+        Vector3Int key = SurfaceChunk(world, ship.transform.position);
+        world.worldData.chunkDictionary[key] = null;
+        system.SetStreamingWorld(world);
+        Assert.That(ship != null, Is.True);
+        world.worldData.chunkDictionary.Clear();
+        NotifyStreaming(world);
+        Assert.That(ship == null, Is.True);
+        Assert.That(mesh == null, Is.True);
+        Assert.That(system.GetComponentsInChildren<Collider>(true), Is.Empty);
+        Assert.That(system.CaptureJson(), Is.EqualTo(json));
+        world.worldData.chunkDictionary[key] = null;
+        NotifyStreaming(world);
+        ship = system.GetComponentInChildren<VoxelStructure>();
+        Assert.That(ship.VoxelCount, Is.EqualTo(58));
+        Assert.That(ship.GetVoxel(Vector3Int.left), Is.EqualTo(VoxelType.Window));
+        Assert.That(ship.GetComponentInChildren<MeshCollider>().sharedMesh, Is.Not.Null);
+        NotifyStreaming(world);
+        Assert.That(system.GetComponentsInChildren<VoxelStructure>().Length, Is.EqualTo(1));
+        Assert.That(system.CaptureJson(), Is.EqualTo(json));
+    }
+
+    [Test]
+    public void DistantFileLoadCreatesNoObjectsAndReplacesPreviousDormantShips()
+    {
+        NewShip();
+        string json = system.CaptureJson();
+        World world = StreamingWorld();
+        system.SetStreamingWorld(world);
+        system.RestoreJson(json);
+        Assert.That(system.GetComponentsInChildren<VoxelStructure>(true), Is.Empty);
+        Assert.That(system.CaptureJson(), Is.EqualTo(json));
+        Assert.Throws<ArgumentException>(() => system.RestoreJson("not json"));
+        Assert.That(system.CaptureJson(), Is.EqualTo(json));
+        system.RestoreJson(JsonUtility.ToJson(new StructureSaveData()));
+        world.worldData.chunkDictionary[SurfaceChunk(world, TestPosition)] = null;
+        NotifyStreaming(world);
+        Assert.That(system.GetComponentsInChildren<VoxelStructure>(), Is.Empty);
+        Assert.That(JsonUtility.FromJson<StructureSaveData>(system.CaptureJson()).structures, Is.Empty);
+    }
+
+    [Test]
+    public void RotatedShipStaysLoadedWhileAnyOfItsChunksAreVisible()
+    {
+        VoxelStructure ship = NewShip();
+        ship.transform.position = new Vector3(-100, 100, -100);
+        ship.transform.rotation = Quaternion.Euler(0, 90, 0);
+        for (int x = 6; x <= 40; x++) ship.SetVoxel(new Vector3Int(x, 0, 0), VoxelType.Metal);
+        Vector3 end = ship.transform.TransformPoint(Vector3.right * (40 * VoxelMetrics.Size));
+        World world = StreamingWorld();
+        Vector3Int endChunk = SurfaceChunk(world, end);
+        Assert.That(endChunk, Is.Not.EqualTo(SurfaceChunk(world, ship.transform.position)));
+        world.worldData.chunkDictionary[endChunk] = null;
+        system.SetStreamingWorld(world);
+        Assert.That(ship != null, Is.True);
+        world.worldData.chunkDictionary.Clear();
+        NotifyStreaming(world);
+        Assert.That(ship == null, Is.True);
+        world.worldData.chunkDictionary[endChunk] = null;
+        NotifyStreaming(world);
+        Assert.That(system.GetComponentInChildren<VoxelStructure>().GetVoxel(new Vector3Int(40, 0, 0)), Is.EqualTo(VoxelType.Metal));
+    }
+
+    [Test]
+    public void LibraryKeepsShipsOutsideTheWorldAndUpdatesSavedEditsById()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "ship-library-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            VoxelStructure ship = NewShip();
+            ship.SetVoxel(Vector3Int.left, VoxelType.Metal);
+            system.SaveToFile(path);
+            system.SelectSavedShip(system.ReadSavedShips(path).Single());
+            ship.SetVoxel(Vector3Int.left, VoxelType.Air);
+            ship.SetVoxel(new Vector3Int(0, 6, 0), VoxelType.Window);
+            system.SaveToFile(path);
+            StructureData latest = system.ReadSavedShips(path).Single();
+            Assert.That(latest.id, Is.EqualTo(ship.Id));
+            Assert.That(latest.voxels.Any(v => v.position == Vector3Int.left), Is.False);
+            Assert.That(latest.voxels.Single(v => v.position == new Vector3Int(0, 6, 0)).type, Is.EqualTo(VoxelType.Window));
+            Assert.That(JsonUtility.ToJson(system.SelectedShip), Is.EqualTo(JsonUtility.ToJson(latest)));
+            system.RestoreJson(JsonUtility.ToJson(new StructureSaveData()));
+            system.SaveToFile(path);
+            Assert.That(system.ReadSavedShips(path).Single().id, Is.EqualTo(latest.id));
+            VoxelStructure support = NewShip();
+            system.SelectSavedShip(system.ReadSavedShips(path).Single());
+            Assert.That(system.TryPlaceSavedShip(Hit(support, new Vector3Int(5, 5, 5), Vector3Int.up)), Is.True);
+            VoxelStructure copy = system.GetComponentsInChildren<VoxelStructure>().Single(s => s != support);
+            Assert.That(copy.GetVoxel(new Vector3Int(0, 6, 0)), Is.EqualTo(VoxelType.Window));
+            Assert.That(copy.GetVoxel(Vector3Int.left), Is.EqualTo(VoxelType.Air));
+            Assert.That(copy.Id, Is.Not.EqualTo(latest.id));
+        }
+        finally
+        {
+            foreach (string suffix in new[] { "", ".bak", ".tmp", ".library", ".library.bak", ".library.tmp" })
+                if (File.Exists(path + suffix)) File.Delete(path + suffix);
+        }
+    }
+
+    [Test]
+    public void ShipCopiesHaveFreshIdsAndPreviewRejectsOccupiedSpaceWithoutMutatingTheSource()
+    {
+        VoxelStructure source = NewShip();
+        Assert.That(source.TryPlacePrefab(Hit(source, Vector3Int.zero, Vector3Int.back), "Circuit"), Is.True);
+        UnityEngine.Object.DestroyImmediate(source.Attachments.Single().GetComponent<CircuitStructureState>());
+        StructureData template = source.Capture();
+        string original = JsonUtility.ToJson(template);
+        system.SelectSavedShip(template);
+        RaycastHit hit = Hit(source, new Vector3Int(5, 5, 5), Vector3Int.up);
+        system.ShowSavedShipPreview(hit);
+        GameObject ghost = GameObject.Find("Frame placement preview");
+        Assert.That(ghost.GetComponentsInChildren<Collider>(), Is.Empty);
+        Mesh mesh = ghost.GetComponent<MeshFilter>().sharedMesh;
+        system.ShowSavedShipPreview(hit);
+        Assert.That(ghost.GetComponent<MeshFilter>().sharedMesh, Is.SameAs(mesh));
+        Assert.That(system.TryPlaceSavedShip(hit), Is.True);
+        Assert.That(system.TryGetSavedShipPlacement(hit, out BlueprintPlacement blocked), Is.True);
+        Assert.That(blocked.canPlace, Is.False);
+        Assert.That(system.TryPlaceSavedShip(hit), Is.False);
+        Assert.That(system.TryPlaceSavedShip(Hit(source, new Vector3Int(0, 5, 0), Vector3Int.left)), Is.True);
+        VoxelStructure[] ships = system.GetComponentsInChildren<VoxelStructure>();
+        Assert.That(ships.Length, Is.EqualTo(3));
+        Assert.That(ships.Select(s => s.Id).Distinct().Count(), Is.EqualTo(3));
+        Assert.That(ships.Select(s => s.Attachments.Single().Data.id).Distinct().Count(), Is.EqualTo(3));
+        VoxelStructure copy = ships.First(s => s != source);
+        copy.SetVoxel(Vector3Int.left, VoxelType.Window);
+        Assert.That(source.GetVoxel(Vector3Int.left), Is.EqualTo(VoxelType.Air));
+        Assert.That(JsonUtility.ToJson(template), Is.EqualTo(original));
+        system.SelectSavedShip(null);
+        Assert.That(ghost.activeSelf, Is.False);
     }
 
     [Test]
@@ -451,9 +667,34 @@ public sealed class StructureTests
         Assert.That(input.FindAction("Player/LoadStructures").bindings.Single().path, Is.EqualTo("<Keyboard>/f9"));
     }
 
-    private TextAsset Frame => AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/_Prefabs/InventoryPrefabs/Voxels/MetalFrame.json");
-    private TextAsset MasterFrame => AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/_Prefabs/InventoryPrefabs/Voxels/MasterFrame.json");
+    private TextAsset Frame => AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/_Prefabs/InventoryPrefabs/Voxels/MetalFrame/MetalFrame.json");
+    private TextAsset MasterFrame => AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/_Prefabs/InventoryPrefabs/Voxels/MasterFrame/MasterFrame.json");
     private VoxelStructure NewStructure() => system.CreateStructure("Test ship", TestPosition, Quaternion.identity);
+    private World StreamingWorld()
+    {
+        GameObject root = NewObject("Streaming world");
+        root.SetActive(false);
+        World world = root.AddComponent<World>();
+        world.chunkSize = world.chunkHeight = 16;
+        typeof(World).GetMethod("Awake", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(world, null);
+        return world;
+    }
+    private static Vector3Int SurfaceChunk(World world, Vector3 position)
+    {
+        Vector3Int key = WorldDataHelper.ChunkPositionFromVoxelCoords(world, VoxelMetrics.WorldToVoxelCoord(position));
+        key.y = 0;
+        return key;
+    }
+    private static void NotifyStreaming(World world) =>
+        ((Action)typeof(World).GetField("OnChunkVisibilityChanged", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(world))?.Invoke();
+    private VoxelStructure NewShip()
+    {
+        VoxelStructure structure = NewStructure();
+        StructureData frame = FrameBlueprint.Create(true);
+        frame.position = TestPosition;
+        structure.Restore(frame);
+        return structure;
+    }
     private static int VertexCount(VoxelStructure structure) => structure.GetComponentsInChildren<MeshFilter>().Sum(f => f.sharedMesh.vertexCount);
 
     private GameObject NewObject(string name)

@@ -401,6 +401,50 @@ public sealed class VoxelInventoryTests
     }
 
     [Test]
+    public void SharedCubeMaterialsPreserveFaceTextures()
+    {
+        VoxelDataSO source = ScriptableObject.CreateInstance<VoxelDataSO>(); objects.Add(source);
+        source.textureSizeX = source.textureSizeY = 1f / 16f;
+        source.textureDataList = new List<TextureData> { new() { voxelType = VoxelType.Dark_Ship_Metal,
+            up = new Vector2Int(1, 2), down = new Vector2Int(3, 4), side = new Vector2Int(5, 6) } };
+        Mesh shared = VoxelPaletteEditor.BuildCube(source, VoxelType.Dark_Ship_Metal, true); objects.Add(shared);
+        Mesh baked = VoxelPaletteEditor.BuildCube(source, VoxelType.Dark_Ship_Metal); objects.Add(baked);
+        Material material = VoxelPaletteEditor.BuildCubeMaterial(source, VoxelType.Dark_Ship_Metal,
+            AssetDatabase.LoadAssetAtPath<Material>("Assets/_Textures/MainMaterial.mat")); objects.Add(material);
+        Assert.That(material.IsKeywordEnabled("_VOXEL_ITEM"), Is.True);
+        Vector4 topBottom = material.GetVector("_VoxelTopBottom"), side = material.GetVector("_VoxelSide");
+        float inset = material.GetFloat("_VoxelAtlasInset");
+        for (int i = 0; i < shared.vertexCount; i++)
+        {
+            Vector2 tile = shared.normals[i].y > .5f ? new Vector2(topBottom.x, topBottom.y) :
+                shared.normals[i].y < -.5f ? new Vector2(topBottom.z, topBottom.w) : new Vector2(side.x, side.y);
+            Vector2 uv = tile / 16f + Vector2.one * inset + shared.uv[i] * (1f / 16f - 2 * inset);
+            Assert.That(Vector2.Distance(uv, baked.uv[i]), Is.LessThan(.00001f));
+        }
+        Assert.That(shared.vertices, Is.EqualTo(baked.vertices));
+        Assert.That(shared.triangles, Is.EqualTo(baked.triangles));
+    }
+
+    [Test]
+    public void CubeItemsReferenceOneMeshAndTheirOwnAtlasTiles()
+    {
+        Mesh cube = AssetDatabase.LoadAssetAtPath<Mesh>(VoxelPaletteEditor.AssetFolder + "/Shared/Cube.asset");
+        Assert.That(cube, Is.Not.Null);
+        VoxelDataSO database = AssetDatabase.LoadAssetAtPath<VoxelDataSO>("Assets/_Scripts/World Generation/VoxelData.asset");
+        foreach (VoxelType type in new[] { VoxelType.Dark_Ship_Metal, VoxelType.Infected_Growth,
+            VoxelType.Ship_Metal, VoxelType.Metal, VoxelType.Striped_Ship_Metal, VoxelType.Window })
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{VoxelPaletteEditor.AssetFolder}/{type}/{type}Hand.prefab");
+            Assert.That(prefab.GetComponentInChildren<MeshFilter>().sharedMesh, Is.SameAs(cube));
+            Material material = prefab.GetComponentInChildren<MeshRenderer>().sharedMaterial;
+            TextureData texture = database.textureDataList.First(t => t.voxelType == type);
+            Assert.That(material.IsKeywordEnabled("_VOXEL_ITEM"), Is.True);
+            Assert.That(material.GetVector("_VoxelTopBottom"), Is.EqualTo(new Vector4(texture.up.x, texture.up.y, texture.down.x, texture.down.y)));
+            Assert.That(material.GetVector("_VoxelSide"), Is.EqualTo(new Vector4(texture.side.x, texture.side.y, 0, 0)));
+        }
+    }
+
+    [Test]
     public void CubeUsesSeparateTopBottomAndSideAtlasCoordinates()
     {
         VoxelDataSO source = ScriptableObject.CreateInstance<VoxelDataSO>(); objects.Add(source);
@@ -425,7 +469,7 @@ public sealed class VoxelInventoryTests
         structure.RebuildMeshes();
         PlayerInput input = NewInput();
         Inventory inventory = NewInventory();
-        ItemSO frame = AssetDatabase.LoadAssetAtPath<ItemSO>(VoxelPaletteEditor.AssetFolder + "/MetalFrameItem.asset");
+        ItemSO frame = AssetDatabase.LoadAssetAtPath<ItemSO>(VoxelPaletteEditor.AssetFolder + "/MetalFrame/MetalFrameItem.asset");
         inventory.AddItem(frame, 1);
         PlayerPlacementController controller = input.gameObject.AddComponent<PlayerPlacementController>();
         Set(controller, "playerInput", input);

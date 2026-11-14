@@ -15,6 +15,16 @@ public sealed class InventoryMenu : MonoBehaviour
     private readonly List<Slot> rows = new();
     private Inventory inventory;
     private int firstVisible = -1;
+    private StructureSystem structures;
+    private List<StructureData> ships = new();
+    private int selectedShip;
+    private string shipMessage;
+    private Button itemsTab, devTab;
+    private TMP_Text controls;
+    private string itemControls;
+    public bool IsDevTab { get; private set; }
+    public bool IsPlacingShip => structures != null && structures.SelectedShip != null;
+    private int RowCount => IsDevTab ? ships.Count : inventory.Items.Count;
     public ItemSO HoveredItem
     {
         get
@@ -27,21 +37,108 @@ public sealed class InventoryMenu : MonoBehaviour
 
     public void Initialize(Inventory owner)
     {
+        if (inventory != null) return;
         inventory = owner;
-        equipButton.onClick.AddListener(inventory.EquipSelected);
-        dropButton.onClick.AddListener(inventory.DropSelected);
+        structures = FindFirstObjectByType<StructureSystem>();
+        controls = scroll.transform.parent.parent.Find("Controls")?.GetComponent<TMP_Text>();
+        itemControls = controls != null ? controls.text : "";
+        equipButton.onClick.AddListener(ActivateSelected);
+        dropButton.onClick.AddListener(() => { if (IsDevTab) SaveDevShips(); else inventory.DropSelected(); });
         scroll.onValueChanged.AddListener(_ => RefreshRows(false));
+        itemsTab = CreateTab("ITEMS", -170, false);
+        devTab = CreateTab("DEV SHIPS", -18, true);
+    }
+
+    private Button CreateTab(string label, float x, bool dev)
+    {
+        Button button = Instantiate(equipButton, scroll.transform.parent.parent);
+        button.name = label;
+        button.onClick = new Button.ButtonClickedEvent();
+        button.onClick.AddListener(() => ShowDevTab(dev));
+        button.GetComponentInChildren<TMP_Text>().text = label;
+        RectTransform rect = (RectTransform)button.transform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
+        rect.anchoredPosition = new Vector2(x, -16);
+        rect.sizeDelta = new Vector2(140, 30);
+        return button;
+    }
+
+    public void ShowDevTab(bool dev)
+    {
+        IsDevTab = dev;
+        CancelShipPlacement();
+        scroll.StopMovement();
+        scroll.content.anchoredPosition = Vector2.zero;
+        if (dev) ReloadShips();
+        Refresh();
+    }
+
+    public void Opened()
+    {
+        CancelShipPlacement();
+        if (IsDevTab) ReloadShips();
+    }
+
+    private void ReloadShips()
+    {
+        string id = selectedShip < ships.Count ? ships[selectedShip].id : null;
+        shipMessage = "No saved ships yet.\n\nBuild a master-frame ship,\nthen press F5 or SAVE ALL.";
+        try
+        {
+            if (structures == null) structures = FindFirstObjectByType<StructureSystem>();
+            ships = structures != null ? structures.ReadSavedShips() : new List<StructureData>();
+            selectedShip = Mathf.Max(0, ships.FindIndex(s => s.id == id));
+        }
+        catch (System.Exception error) { ships.Clear(); selectedShip = 0; shipMessage = "Cannot read ships: " + error.Message; }
+    }
+
+    public void CancelShipPlacement() { if (structures != null) structures.SelectSavedShip(null); }
+
+    public void ActivateSelected()
+    {
+        if (!IsDevTab) { inventory.EquipSelected(); return; }
+        if (structures == null || ships.Count == 0) return;
+        structures.SelectSavedShip(ships[selectedShip]);
+        inventory.SetOpen(false);
+    }
+
+    public void SaveDevShips()
+    {
+        if (structures == null) return;
+        try { structures.SaveToFile(structures.SavePath); ReloadShips(); Refresh(); }
+        catch (System.Exception error) { itemDescription.text = "Save failed: " + error.Message; }
     }
 
     public void Refresh()
     {
-        if (inventory == null) return;
-        scroll.content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, inventory.Items.Count * RowHeight);
+        if (inventory == null || itemsTab == null || devTab == null) return;
+        scroll.content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, RowCount * RowHeight);
         float maximum = Mathf.Max(0f, scroll.content.rect.height - scroll.viewport.rect.height);
         Vector2 position = scroll.content.anchoredPosition;
         position.y = Mathf.Clamp(position.y, 0f, maximum);
         scroll.content.anchoredPosition = position;
         RefreshRows(true);
+        itemsTab.interactable = devTab.interactable = true;
+        Color selected = new(.2f, .5f, .32f, 1), idle = new(.08f, .18f, .12f, 1);
+        itemsTab.image.color = IsDevTab ? idle : selected;
+        devTab.image.color = IsDevTab ? selected : idle;
+        if (controls != null) controls.text = IsDevTab
+            ? "TAB / ESC Close   UP/DOWN Select   ENTER Preview   F5 Save all\nPlaying: RMB Paste   ESC Cancel   1-6 Build"
+            : itemControls;
+        equipButton.GetComponentInChildren<TMP_Text>().text = IsDevTab ? "PLACE COPY" : "EQUIP";
+        dropButton.GetComponentInChildren<TMP_Text>().text = IsDevTab ? "SAVE ALL" : "DROP";
+        if (IsDevTab)
+        {
+            StructureData ship = ships.Count > 0 ? ships[selectedShip] : null;
+            itemTitle.text = ship?.name ?? "Saved ships";
+            itemCount.text = ship == null ? "" : $"{ship.voxels.Count} voxels / {ship.prefabs.Count} attachments";
+            itemDescription.text = ship == null ? shipMessage : $"ID: {ship.id}\n\nRMB: place   Esc: cancel\n1-6: build   F5 / SAVE ALL: save\nSelect the edited entry to copy it.\nEach copy gets a new ID.";
+            itemIcon.enabled = false;
+            emptyMessage.SetActive(false);
+            equipButton.interactable = ship != null;
+            dropButton.interactable = structures != null;
+            return;
+        }
         ItemSO item = inventory.SelectedItem;
         itemTitle.text = item != null ? item.itemName : "";
         itemDescription.text = item == null ? "Select an item to inspect it." :
@@ -61,23 +158,31 @@ public sealed class InventoryMenu : MonoBehaviour
         if (inventory == null) return;
         int needed = Mathf.Max(2, Mathf.CeilToInt(scroll.viewport.rect.height / RowHeight) + 2);
         bool grew = false;
-        while (rows.Count < Mathf.Min(needed, inventory.Items.Count))
+        while (rows.Count < Mathf.Min(needed, RowCount))
         {
             rows.Add(Instantiate(rowPrefab, scroll.content));
             grew = true;
         }
         int first = Mathf.Clamp(Mathf.FloorToInt(scroll.content.anchoredPosition.y / RowHeight), 0,
-            Mathf.Max(0, inventory.Items.Count - 1));
+            Mathf.Max(0, RowCount - 1));
         if (!force && !grew && first == firstVisible) return;
         firstVisible = first;
         for (int i = 0; i < rows.Count; i++)
         {
             int index = first + i;
-            bool visible = i < needed && index < inventory.Items.Count;
+            bool visible = i < needed && index < RowCount;
             rows[i].gameObject.SetActive(visible);
             if (!visible) continue;
-            Inventory.Entry entry = inventory.Items[index];
             ((RectTransform)rows[i].transform).anchoredPosition = new Vector2(0f, -index * RowHeight);
+            if (IsDevTab)
+            {
+                StructureData ship = ships[index];
+                rows[i].BindShip(inventory, $"{ship.name}  [{ship.id.Substring(0, Mathf.Min(8, ship.id.Length))}]",
+                    () => { selectedShip = index; Refresh(); });
+                rows[i].SetSelected(index == selectedShip);
+                continue;
+            }
+            Inventory.Entry entry = inventory.Items[index];
             rows[i].Bind(inventory, entry.Item, entry.Amount);
             rows[i].SetSelected(entry.Item == inventory.SelectedItem);
         }
@@ -90,12 +195,13 @@ public sealed class InventoryMenu : MonoBehaviour
 
     public void MoveSelection(int direction)
     {
-        if (inventory.Items.Count == 0) return;
-        int index = 0;
-        for (int i = 0; i < inventory.Items.Count; i++)
+        if (RowCount == 0) return;
+        int index = IsDevTab ? selectedShip : 0;
+        for (int i = 0; !IsDevTab && i < inventory.Items.Count; i++)
             if (inventory.Items[i].Item == inventory.SelectedItem) { index = i; break; }
-        index = Mathf.Clamp(index + direction, 0, inventory.Items.Count - 1);
-        inventory.SelectItem(inventory.Items[index].Item);
+        index = Mathf.Clamp(index + direction, 0, RowCount - 1);
+        if (IsDevTab) { selectedShip = index; Refresh(); }
+        else inventory.SelectItem(inventory.Items[index].Item);
         Vector2 position = scroll.content.anchoredPosition;
         float top = index * RowHeight;
         if (top < position.y) position.y = top;

@@ -21,26 +21,19 @@ public static class VoxelPaletteEditor
     [MenuItem("Tools/Voxels/Regenerate Inventory Visuals")]
     public static void Regenerate()
     {
-        Directory.CreateDirectory(AssetFolder);
+        foreach (string id in Types.Select(t => t.ToString()).Concat(new[] { "Circuit", "MetalFrame", "MasterFrame", "Shared" }))
+            Directory.CreateDirectory($"{AssetFolder}/{id}");
         AssetDatabase.Refresh();
         VoxelDataSO database = AssetDatabase.LoadAssetAtPath<VoxelDataSO>("Assets/_Scripts/World Generation/VoxelData.asset");
         Material material = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Textures/MainMaterial.mat");
+        Mesh cube = SaveAsset(BuildCube(database, Types[0], true), $"{AssetFolder}/Shared/Cube.asset");
         foreach (VoxelType type in Types)
         {
             string id = type.ToString();
-            Mesh mesh = BuildCube(database, type);
-            string meshPath = $"{AssetFolder}/{id}.asset";
-            Mesh savedMesh = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
-            if (savedMesh == null) { savedMesh = mesh; AssetDatabase.CreateAsset(mesh, meshPath); }
-            else
-            {
-                EditorUtility.CopySerialized(mesh, savedMesh);
-                EditorUtility.SetDirty(savedMesh);
-                UnityEngine.Object.DestroyImmediate(mesh);
-            }
             GameObject visual = new(id);
-            visual.AddComponent<MeshFilter>().sharedMesh = savedMesh;
-            visual.AddComponent<MeshRenderer>().sharedMaterial = material;
+            visual.AddComponent<MeshFilter>().sharedMesh = cube;
+            visual.AddComponent<MeshRenderer>().sharedMaterial = SaveAsset(
+                BuildCubeMaterial(database, type, material), $"{AssetFolder}/{id}/{id}.mat");
             try { SaveItem(id, id.Replace('_', ' '), visual, ItemPlacementKind.TerrainVoxel, type); }
             finally { UnityEngine.Object.DestroyImmediate(visual); }
         }
@@ -74,13 +67,13 @@ public static class VoxelPaletteEditor
             pieces.Add(new CombineInstance { mesh = cubes[voxel.type],
                 transform = Matrix4x4.TRS(((Vector3)voxel.position - Vector3.one * 2.5f) / 6f, Quaternion.identity, Vector3.one / 6f) });
         }
-        string blueprintPath = $"{AssetFolder}/{id}.json";
+        string blueprintPath = $"{AssetFolder}/{id}/{id}.json";
         File.WriteAllText(blueprintPath, JsonUtility.ToJson(frame, true));
         AssetDatabase.ImportAsset(blueprintPath, ImportAssetOptions.ForceSynchronousImport);
         Mesh mesh = new() { name = frame.name + " Display" };
         mesh.CombineMeshes(pieces.ToArray());
         foreach (Mesh cube in cubes.Values) UnityEngine.Object.DestroyImmediate(cube);
-        string meshPath = $"{AssetFolder}/{id}.asset";
+        string meshPath = $"{AssetFolder}/{id}/{id}.asset";
         Mesh saved = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
         if (saved == null) { saved = mesh; AssetDatabase.CreateAsset(saved, meshPath); }
         else
@@ -94,7 +87,7 @@ public static class VoxelPaletteEditor
         visual.AddComponent<MeshRenderer>().sharedMaterial = material;
         try { SaveItem(id, frame.name, visual, ItemPlacementKind.StructureBlueprint, VoxelType.Dark_Ship_Metal); }
         finally { UnityEngine.Object.DestroyImmediate(visual); }
-        ItemSO item = AssetDatabase.LoadAssetAtPath<ItemSO>($"{AssetFolder}/{id}Item.asset");
+        ItemSO item = AssetDatabase.LoadAssetAtPath<ItemSO>($"{AssetFolder}/{id}/{id}Item.asset");
         item.structureBlueprint = AssetDatabase.LoadAssetAtPath<TextAsset>(blueprintPath);
         item.description = master
             ? "Starts a structure at local (0, 0, 0). Its 6 x 6 x 6 metal border cannot be removed. Orange stripes mark the centre pair of each bottom edge. F5 saves; F9 loads."
@@ -102,7 +95,29 @@ public static class VoxelPaletteEditor
         EditorUtility.SetDirty(item);
     }
 
-    public static Mesh BuildCube(VoxelDataSO database, VoxelType type)
+    private static T SaveAsset<T>(T asset, string path) where T : UnityEngine.Object
+    {
+        T saved = AssetDatabase.LoadAssetAtPath<T>(path);
+        if (saved == null) { AssetDatabase.CreateAsset(asset, path); return asset; }
+        EditorUtility.CopySerialized(asset, saved);
+        EditorUtility.SetDirty(saved);
+        UnityEngine.Object.DestroyImmediate(asset);
+        return saved;
+    }
+
+    public static Material BuildCubeMaterial(VoxelDataSO database, VoxelType type, Material source)
+    {
+        TextureData texture = database.textureDataList.First(t => t.voxelType == type);
+        Material material = new(source) { name = type + " Display" };
+        material.EnableKeyword("_VOXEL_ITEM");
+        material.SetVector("_VoxelTopBottom", new Vector4(texture.up.x, texture.up.y, texture.down.x, texture.down.y));
+        material.SetVector("_VoxelSide", new Vector4(texture.side.x, texture.side.y, 0, 0));
+        material.SetVector("_VoxelAtlasTileSize", new Vector4(database.textureSizeX, database.textureSizeY, 0, 0));
+        material.SetFloat("_VoxelAtlasInset", VoxelDataManager.textureOffset);
+        return material;
+    }
+
+    public static Mesh BuildCube(VoxelDataSO database, VoxelType type, bool shared = false)
     {
         TextureData texture = database.textureDataList.First(t => t.voxelType == type);
         var vertices = new List<Vector3>();
@@ -120,6 +135,7 @@ public static class VoxelPaletteEditor
             float minY = tile.y * database.textureSizeY + VoxelDataManager.textureOffset;
             float maxX = (tile.x + 1) * database.textureSizeX - VoxelDataManager.textureOffset;
             float maxY = (tile.y + 1) * database.textureSizeY - VoxelDataManager.textureOffset;
+            if (shared) { minX = minY = 0; maxX = maxY = 1; }
             int start = vertices.Count;
             vertices.Add((normal - u - v) * 0.5f);
             vertices.Add((normal + u - v) * 0.5f);
@@ -129,7 +145,7 @@ public static class VoxelPaletteEditor
             for (int i = 0; i < 4; i++) { normals.Add(normal); tiledUvs.Add(new Vector2(-1f, -1f)); }
             triangles.AddRange(new[] { start, start + 1, start + 2, start, start + 2, start + 3 });
         }
-        Mesh mesh = new() { name = type + " Display Cube" };
+        Mesh mesh = new() { name = shared ? "Shared Voxel Cube" : type + " Display Cube" };
         mesh.SetVertices(vertices);
         mesh.SetNormals(normals);
         mesh.SetUVs(0, uvs);
@@ -173,7 +189,7 @@ public static class VoxelPaletteEditor
 
     private static void SaveItem(string id, string displayName, GameObject visual, ItemPlacementKind kind, VoxelType type)
     {
-        string iconPath = $"{AssetFolder}/{id}.png";
+        string iconPath = $"{AssetFolder}/{id}/{id}.png";
         RenderIcon(visual, iconPath);
         var importer = (TextureImporter)AssetImporter.GetAtPath(iconPath);
         importer.textureType = TextureImporterType.Sprite;
@@ -196,10 +212,10 @@ public static class VoxelPaletteEditor
             renderer.receiveShadows = false;
         }
         GameObject prefab;
-        try { prefab = PrefabUtility.SaveAsPrefabAsset(held, $"{AssetFolder}/{id}Hand.prefab"); }
+        try { prefab = PrefabUtility.SaveAsPrefabAsset(held, $"{AssetFolder}/{id}/{id}Hand.prefab"); }
         finally { visual.transform.SetParent(null); UnityEngine.Object.DestroyImmediate(held); }
 
-        string path = $"{AssetFolder}/{id}Item.asset";
+        string path = $"{AssetFolder}/{id}/{id}Item.asset";
         ItemSO item = AssetDatabase.LoadAssetAtPath<ItemSO>(path);
         if (item == null) { item = ScriptableObject.CreateInstance<ItemSO>(); AssetDatabase.CreateAsset(item, path); }
         item.itemName = displayName;
@@ -281,7 +297,7 @@ public static class VoxelPaletteEditor
             slots.arraySize = 6;
             for (int i = 0; i < names.Length; i++)
             {
-                ItemSO item = AssetDatabase.LoadAssetAtPath<ItemSO>($"{AssetFolder}/{names[i]}Item.asset");
+                ItemSO item = AssetDatabase.LoadAssetAtPath<ItemSO>($"{AssetFolder}/{names[i]}/{names[i]}Item.asset");
                 if (item == null) throw new InvalidOperationException("Regenerate inventory visuals first.");
                 bool exists = false;
                 for (int j = 0; j < entries.arraySize; j++)

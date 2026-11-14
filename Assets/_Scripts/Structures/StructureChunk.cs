@@ -48,8 +48,11 @@ public sealed class StructureChunk : MonoBehaviour
         if (data.triangles.Count > 0) collider.sharedMesh = mesh;
     }
 
-    private void OnDestroy()
+    internal void ReleaseMesh()
     {
         if (mesh != null) VoxelStructure.Release(mesh);
+        mesh = null;
     }
+
+    private void OnDestroy() => ReleaseMesh();
 }

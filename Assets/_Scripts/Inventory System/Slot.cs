@@ -14,6 +14,7 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
     private TextMeshProUGUI amountTxt;
     private Inventory inventory;
     private int hotbarIndex = -1;
+    private System.Action selectRow;
 
     private void Awake() => CacheReferences();
     private void CacheReferences()
@@ -30,9 +31,17 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
 
     public void Bind(Inventory owner, ItemSO item, int amount, int shortcutIndex = -1)
     {
+        selectRow = null;
         inventory = owner;
         hotbarIndex = shortcutIndex;
         SetItem(item, amount);
+    }
+
+    public void BindShip(Inventory owner, string label, System.Action select)
+    {
+        Bind(owner, null, 0);
+        itemNameText.text = label;
+        selectRow = select;
     }
 
     public void SetItem(ItemSO item, int amount = 1)
@@ -67,6 +76,7 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
     public void OnPointerClick(PointerEventData eventData)
     {
         if (inventory == null || !inventory.IsOpen || eventData.button != PointerEventData.InputButton.Left) return;
+        if (selectRow != null) { selectRow(); return; }
         if (hotbarIndex >= 0) inventory.SelectHotbar(hotbarIndex);
         else inventory.SelectItem(heldItem);
     }

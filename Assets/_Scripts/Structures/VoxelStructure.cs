@@ -128,16 +128,32 @@ public sealed class VoxelStructure : MonoBehaviour
         return true;
     }
 
-    public StructureData Capture()
+    public StructureData Capture(bool connectedOnly = true)
     {
         StructureData data = new() { id = Id, name = name, hasMasterFrame = HasMasterFrame,
             position = transform.position, rotation = transform.rotation };
         foreach (var chunk in chunks.Values)
             foreach (var voxel in chunk.Voxels)
                 data.voxels.Add(new StructureVoxelData(chunk.Origin + voxel.Key, voxel.Value));
-        data.voxels.Sort((a, b) => ComparePosition(a.position, b.position));
-        foreach (StructureAttachment attachment in attachments) data.prefabs.Add(attachment.Capture());
+        HashSet<Vector3Int> connected = null;
+        if (connectedOnly) data = data.ConnectedCopy(out connected);
+        if (!connectedOnly) data.voxels.Sort((a, b) => ComparePosition(a.position, b.position));
+        foreach (StructureAttachment attachment in attachments)
+            if (!connectedOnly || connected.Contains(attachment.Data.surfaceVoxel)) data.prefabs.Add(attachment.Capture());
         return data;
+    }
+
+    public Bounds WorldBounds()
+    {
+        Bounds bounds = new(transform.position, Vector3.zero);
+        // Chunk bounds are conservative and cheap; a ship stays loaded until all of it leaves.
+        foreach (StructureChunk chunk in chunks.Values)
+            for (int corner = 0; corner < 8; corner++)
+                bounds.Encapsulate(transform.TransformPoint(((Vector3)chunk.Origin + new Vector3(
+                    (corner & 1) == 0 ? -0.5f : StructureChunk.Size - 0.5f,
+                    (corner & 2) == 0 ? -0.5f : StructureChunk.Size - 0.5f,
+                    (corner & 4) == 0 ? -0.5f : StructureChunk.Size - 0.5f)) * VoxelMetrics.Size));
+        return bounds;
     }
 
     public void Restore(StructureData data)
@@ -190,7 +206,7 @@ public sealed class VoxelStructure : MonoBehaviour
         Mathf.FloorToInt((float)p.y / StructureChunk.Size) * StructureChunk.Size,
         Mathf.FloorToInt((float)p.z / StructureChunk.Size) * StructureChunk.Size);
 
-    private static int ComparePosition(Vector3Int a, Vector3Int b)
+    internal static int ComparePosition(Vector3Int a, Vector3Int b)
     {
         int x = a.x.CompareTo(b.x);
         if (x != 0) return x;
@@ -202,5 +218,12 @@ public sealed class VoxelStructure : MonoBehaviour
     {
         if (Application.isPlaying) Destroy(value);
         else DestroyImmediate(value);
+    }
+
+    public void Unload()
+    {
+        gameObject.SetActive(false);
+        foreach (StructureChunk chunk in chunks.Values) chunk.ReleaseMesh();
+        Release(gameObject);
     }
 }

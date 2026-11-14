@@ -135,7 +135,7 @@ public class Inventory : MonoBehaviour
     private void LateUpdate()
     {
         if (currentHandItem != null)
-            currentHandItem.SetActive(!isOpen && playerInput != null && !playerInput.IsGameplayInputBlocked);
+            currentHandItem.SetActive(!isOpen && playerInput != null && !playerInput.IsGameplayInputBlocked && (menu == null || !menu.IsPlacingShip));
     }
 
     public void SetOpen(bool open)
@@ -148,6 +148,7 @@ public class Inventory : MonoBehaviour
         Cursor.visible = open;
         if (open)
         {
+            menu?.Opened();
             Canvas.ForceUpdateCanvases();
             menu?.Refresh();
         }
@@ -217,6 +218,7 @@ public class Inventory : MonoBehaviour
     public void SelectHotbar(int index)
     {
         if (index < 0 || index >= hotbarItems.Length) return;
+        menu?.CancelShipPlacement();
         equippedHotbarIndex = index;
         Refresh();
     }
@@ -242,6 +244,14 @@ public class Inventory : MonoBehaviour
         if (!isOpen && playerInput != null && playerInput.IsGameplayInputBlocked) return;
         Keyboard keyboard = Keyboard.current;
         if (keyboard == null) return;
+        if (isOpen && menu != null && menu.IsDevTab)
+        {
+            if (keyboard.enterKey.wasPressedThisFrame) menu.ActivateSelected();
+            if (keyboard.f5Key.wasPressedThisFrame) menu.SaveDevShips();
+            if (keyboard.upArrowKey.wasPressedThisFrame) menu.MoveSelection(-1);
+            if (keyboard.downArrowKey.wasPressedThisFrame) menu.MoveSelection(1);
+            return;
+        }
         // Digit keys are contiguous in the Input System's Key enum.
         for (int i = 0; i < hotbarItems.Length; i++)
             if (keyboard[(Key)((int)Key.Digit1 + i)].wasPressedThisFrame)

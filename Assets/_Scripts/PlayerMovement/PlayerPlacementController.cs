@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 [DefaultExecutionOrder(200)]
 public class PlayerPlacementController : MonoBehaviour
@@ -19,6 +20,15 @@ public class PlayerPlacementController : MonoBehaviour
     private void LateUpdate()
     {
         if (inventory == null) inventory = FindFirstObjectByType<Inventory>();
+        if (structures != null && structures.SelectedShip != null)
+        {
+            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) structures.SelectSavedShip(null);
+            if (structures.SelectedShip != null && inventory != null && !inventory.IsOpen && playerInput != null &&
+                !playerInput.IsGameplayInputBlocked && playerInput.TryGetReticleHit(out RaycastHit shipHit))
+                structures.ShowSavedShipPreview(shipHit);
+            else structures.HideBlueprintPreview();
+            return;
+        }
         ItemSO item = inventory != null ? inventory.EquippedItem : null;
         if (structures != null && inventory != null && !inventory.IsOpen && playerInput != null &&
             !playerInput.IsGameplayInputBlocked && item != null && inventory.GetAmount(item) > 0 &&
@@ -37,6 +47,8 @@ public class PlayerPlacementController : MonoBehaviour
         if (inventory == null) inventory = FindFirstObjectByType<Inventory>();
         if (inventory == null || inventory.IsOpen || playerInput == null ||
             playerInput.IsGameplayInputBlocked) return false;
+        if (structures != null && structures.SelectedShip != null)
+            return playerInput.TryGetReticleHit(out RaycastHit shipHit) && structures.TryPlaceSavedShip(shipHit);
         ItemSO item = inventory.EquippedItem;
         if (item == null || inventory.GetAmount(item) <= 0 || item.placementKind == ItemPlacementKind.None ||
             !playerInput.TryGetReticleHit(out RaycastHit hit)) return false;
