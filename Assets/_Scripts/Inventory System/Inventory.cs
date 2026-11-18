@@ -30,6 +30,7 @@ public class Inventory : MonoBehaviour
     public float equippedOpacity = 0.9f;
     public float normalOpacity = 0.5f;
     public Transform hand;
+    [SerializeField] private Camera heldItemCamera;
     [Header("Dropped Items")]
     [SerializeField, Min(0f)] private float dropForwardSpeed = 3f;
     [SerializeField, Min(0f)] private float dropUpwardSpeed = 1f;
@@ -74,7 +75,7 @@ public class Inventory : MonoBehaviour
         if (playerInput != null) playerInput.OnInteract -= PickUp;
         playerInput?.SetGameplayInputBlocked(false, this);
         playerInput = null;
-        if (currentHandItem != null) currentHandItem.SetActive(false);
+        if (currentHandItem != null) SetHandVisible(false);
         if (isOpen)
         {
             isOpen = false;
@@ -134,8 +135,9 @@ public class Inventory : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (currentHandItem != null)
-            currentHandItem.SetActive(!isOpen && playerInput != null && !playerInput.IsGameplayInputBlocked && (menu == null || !menu.IsPlacingShip));
+        if (currentHandItem == null) return;
+        bool visible = !isOpen && playerInput != null && !playerInput.IsGameplayInputBlocked && (menu == null || !menu.IsPlacingShip);
+        if (currentHandItem.activeSelf != visible) SetHandVisible(visible);
     }
 
     public void SetOpen(bool open)
@@ -361,12 +363,29 @@ public class Inventory : MonoBehaviour
     {
         ItemSO item = EquippedItem;
         if (item == handItem && (item == null || currentHandItem != null || item.handItemPrefab == null)) return;
-        if (currentHandItem != null) Destroy(currentHandItem);
+        if (currentHandItem != null)
+        {
+            SetHandVisible(false);
+            Destroy(currentHandItem);
+        }
         currentHandItem = null;
         handItem = item;
         if (item == null || item.handItemPrefab == null || hand == null) return;
         currentHandItem = Instantiate(item.handItemPrefab, hand);
-        currentHandItem.transform.localPosition = Vector3.zero;
-        currentHandItem.transform.localRotation = Quaternion.identity;
+        currentHandItem.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+        if (heldItemCamera != null) SetLayer(currentHandItem.transform, heldItemCamera.gameObject.layer);
+        SetHandVisible(false);
+    }
+
+    private void SetHandVisible(bool visible)
+    {
+        currentHandItem.SetActive(visible);
+        if (heldItemCamera != null) heldItemCamera.enabled = visible;
+    }
+
+    private static void SetLayer(Transform item, int layer)
+    {
+        item.gameObject.layer = layer;
+        for (int i = 0; i < item.childCount; i++) SetLayer(item.GetChild(i), layer);
     }
 }
