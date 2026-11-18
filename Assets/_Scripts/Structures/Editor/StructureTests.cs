@@ -143,12 +143,31 @@ public sealed class StructureTests
         StructureData saved = JsonUtility.FromJson<StructureSaveData>(system.CaptureJson()).structures.Single();
         Assert.That(saved.voxels.Count, Is.EqualTo(56));
         Assert.That(saved.voxels.Any(v => v.position == Vector3Int.down), Is.False, "Touching terrain must not join the ship.");
+        Vector3Int underside = new(5, 0, 5);
+        Assert.That(structure.TryPlaceVoxel(Hit(structure, underside, Vector3Int.down), VoxelType.Metal), Is.True);
+        saved = JsonUtility.FromJson<StructureSaveData>(system.CaptureJson()).structures.Single();
+        Assert.That(saved.voxels.Single(v => v.position == underside + Vector3Int.down).type, Is.EqualTo(VoxelType.Metal));
+        Assert.That(saved.voxels.Any(v => v.position == Vector3Int.down), Is.False);
         hit = Hit(structure, new Vector3Int(0, 5, 0), Vector3Int.up);
         Assert.That(system.TryPlaceBlueprint(hit, MasterFrame), Is.False);
         Assert.That(system.TryPlaceBlueprint(hit, Frame), Is.True);
         Assert.That(system.GetComponentsInChildren<VoxelStructure>().Length, Is.EqualTo(1));
         Assert.That(structure.SetVoxel(new Vector3Int(0, 6, 0), VoxelType.Air), Is.True);
         Assert.That(structure.SetVoxel(new Vector3Int(0, 5, 0), VoxelType.Air), Is.False);
+    }
+
+    [Test]
+    public void UndersideHitAtAnEmptyNeighbourBoundaryResolvesToTheShipFace()
+    {
+        VoxelStructure ship = NewStructure();
+        Vector3Int cell = Vector3Int.right;
+        ship.SetVoxel(cell, VoxelType.Metal);
+        ship.RebuildMeshes();
+        Physics.SyncTransforms();
+        Vector3 seam = ship.transform.TransformPoint(new Vector3(VoxelMetrics.Size * 0.5f, -1f, 0f));
+        Assert.That(ship.GetComponentInChildren<MeshCollider>().Raycast(new Ray(seam, Vector3.up), out var hit, 2f), Is.True);
+        Assert.That(ship.TryPlaceVoxel(hit, VoxelType.Window), Is.True);
+        Assert.That(ship.GetVoxel(cell + Vector3Int.down), Is.EqualTo(VoxelType.Window));
     }
 
     [Test]
@@ -598,13 +617,18 @@ public sealed class StructureTests
         {
             VoxelStructure ship = NewShip();
             ship.SetVoxel(Vector3Int.left, VoxelType.Metal);
-            system.SaveToFile(path);
+            ship.SetVoxel(Vector3Int.down, VoxelType.Metal);
+            system.SaveShip(ship, "  Night Scout  ", path);
             system.SelectSavedShip(system.ReadSavedShips(path).Single());
             ship.SetVoxel(Vector3Int.left, VoxelType.Air);
             ship.SetVoxel(new Vector3Int(0, 6, 0), VoxelType.Window);
             system.SaveToFile(path);
+            Assert.That(system.ReadSavedShips(path).Single().voxels.Any(v => v.position == Vector3Int.left), Is.True);
+            system.SaveShip(ship, "Night Scout", path);
             StructureData latest = system.ReadSavedShips(path).Single();
             Assert.That(latest.id, Is.EqualTo(ship.Id));
+            Assert.That(latest.name, Is.EqualTo("Night Scout"));
+            Assert.That(latest.position, Is.EqualTo(Vector3.zero));
             Assert.That(latest.voxels.Any(v => v.position == Vector3Int.left), Is.False);
             Assert.That(latest.voxels.Single(v => v.position == new Vector3Int(0, 6, 0)).type, Is.EqualTo(VoxelType.Window));
             Assert.That(JsonUtility.ToJson(system.SelectedShip), Is.EqualTo(JsonUtility.ToJson(latest)));
@@ -617,12 +641,46 @@ public sealed class StructureTests
             VoxelStructure copy = system.GetComponentsInChildren<VoxelStructure>().Single(s => s != support);
             Assert.That(copy.GetVoxel(new Vector3Int(0, 6, 0)), Is.EqualTo(VoxelType.Window));
             Assert.That(copy.GetVoxel(Vector3Int.left), Is.EqualTo(VoxelType.Air));
+            Assert.That(copy.GetVoxel(Vector3Int.down), Is.EqualTo(VoxelType.Metal));
             Assert.That(copy.Id, Is.Not.EqualTo(latest.id));
         }
         finally
         {
             foreach (string suffix in new[] { "", ".bak", ".tmp", ".library", ".library.bak", ".library.tmp" })
                 if (File.Exists(path + suffix)) File.Delete(path + suffix);
+        }
+    }
+
+    [Test]
+    public void LocalRenameAndDeleteMigrateLegacySavesWithoutChangingWorldOrBuiltInShips()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "ship-library-" + Guid.NewGuid().ToString("N") + ".json");
+        SetReference(system, "builtInShipLibrary", AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/_Prefabs/ShipLibrary.json"));
+        var builtIn = system.ReadBuiltInShips();
+        Assert.That(builtIn.Select(ship => ship.name), Is.EquivalentTo(new[] { "Mule Cargo Shuttle", "Pathfinder Scout" }));
+        foreach (var ship in builtIn)
+        {
+            Assert.That(ship.ConnectedCopy(out _).voxels.Count, Is.EqualTo(ship.voxels.Count));
+            Assert.That(ship.voxels.Any(v => v.position.y < 0), Is.True);
+        }
+        try
+        {
+            VoxelStructure ship = NewShip();
+            File.WriteAllText(path, system.CaptureJson()); // Legacy world-only save.
+            system.SelectSavedShip(builtIn[0]);
+            Assert.That(system.RenameSavedShip(builtIn[0].id, "New name", path), Is.False);
+            Assert.That(system.DeleteSavedShip(builtIn[0].id, path), Is.False);
+            Assert.That(system.SelectedShip, Is.SameAs(builtIn[0]));
+            Assert.That(system.RenameSavedShip(ship.Id, "Legacy Scout", path), Is.True);
+            Assert.That(system.ReadSavedShips(path).Single().name, Is.EqualTo("Legacy Scout"));
+            Assert.That(system.DeleteSavedShip(ship.Id, path), Is.True);
+            system.SaveToFile(path);
+            Assert.That(system.ReadSavedShips(path), Is.Empty);
+            Assert.That(JsonUtility.FromJson<StructureSaveData>(File.ReadAllText(path)).structures.Single().id, Is.EqualTo(ship.Id));
+        }
+        finally
+        {
+            foreach (string suffix in new[] { "", ".bak", ".library", ".library.bak" }) File.Delete(path + suffix);
         }
     }
 

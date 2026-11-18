@@ -79,6 +79,7 @@ public class Inventory : MonoBehaviour
         if (isOpen)
         {
             isOpen = false;
+            menu?.Closed();
             container?.SetActive(false);
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -154,7 +155,20 @@ public class Inventory : MonoBehaviour
             Canvas.ForceUpdateCanvases();
             menu?.Refresh();
         }
-        else SetLookedAtRenderer(null);
+        else
+        {
+            menu?.Closed();
+            SetLookedAtRenderer(null);
+        }
+    }
+
+    public bool OpenShipSave(VoxelStructure ship)
+    {
+        if (menu == null) return false;
+        SetOpen(true);
+        if (!isOpen) return false;
+        menu.BeginShipSave(ship);
+        return true;
     }
 
     public int GetAmount(ItemSO item)
@@ -248,7 +262,9 @@ public class Inventory : MonoBehaviour
         if (keyboard == null) return;
         if (isOpen && menu != null && menu.IsDevTab)
         {
-            if (keyboard.enterKey.wasPressedThisFrame) menu.ActivateSelected();
+            bool editing = menu.IsEditingShip;
+            if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame) menu.ActivateSelected();
+            if (editing) return;
             if (keyboard.f5Key.wasPressedThisFrame) menu.SaveDevShips();
             if (keyboard.upArrowKey.wasPressedThisFrame) menu.MoveSelection(-1);
             if (keyboard.downArrowKey.wasPressedThisFrame) menu.MoveSelection(1);

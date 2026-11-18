@@ -249,22 +249,16 @@ public sealed partial class StructureSystem : MonoBehaviour
     public void SaveToFile(string path)
     {
         string json = CaptureJson();
-        var ships = ReadSavedShips(path);
-        foreach (StructureData ship in JsonUtility.FromJson<StructureSaveData>(json).structures)
-        {
-            int index = ships.FindIndex(s => s.id == ship.id);
-            if (index < 0) ships.Add(ship); else ships[index] = ship;
-        }
-        WriteSnapshot(path + ".library", JsonUtility.ToJson(new StructureSaveData { structures = ships }, true));
+        // Migrate world-only saves before overwriting them. The library remains authoritative after that.
+        if (!File.Exists(path + ".library")) WriteShipLibrary(path, ReadSavedShips(path));
         WriteSnapshot(path, json);
-        if (SelectedShip != null) SelectSavedShip(ships.Find(s => s.id == SelectedShip.id));
     }
 
     private static void WriteSnapshot(string path, string json)
     {
         string fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
-        string temporary = fullPath + ".tmp";
+        string temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             File.WriteAllText(temporary, json);
@@ -278,7 +272,7 @@ public sealed partial class StructureSystem : MonoBehaviour
 
     public void SaveStructures()
     {
-        try { SaveToFile(SavePath); ShowStatus("Structures saved.  F9 to load"); }
+        try { SaveToFile(SavePath); ShowStatus("World ships saved. F9 to load."); }
         catch (Exception error) { ShowStatus("Save failed: " + error.Message); }
     }
 

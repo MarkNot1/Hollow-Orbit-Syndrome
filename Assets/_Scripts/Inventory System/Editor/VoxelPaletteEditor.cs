@@ -90,7 +90,7 @@ public static class VoxelPaletteEditor
         ItemSO item = AssetDatabase.LoadAssetAtPath<ItemSO>($"{AssetFolder}/{id}/{id}Item.asset");
         item.structureBlueprint = AssetDatabase.LoadAssetAtPath<TextAsset>(blueprintPath);
         item.description = master
-            ? "Starts a structure at local (0, 0, 0). Its 6 x 6 x 6 metal border cannot be removed. Orange stripes mark the centre pair of each bottom edge. F5 saves; F9 loads."
+            ? "Starts a structure with a protected 6 x 6 x 6 metal border. Aim at the ship and press F5 to name and save it to the Ship Library."
             : "An editable 6 x 6 x 6 dark ship metal frame with open faces. Place on an existing structure to extend it. Use a Master Frame to start a structure.";
         EditorUtility.SetDirty(item);
     }
@@ -327,7 +327,7 @@ public static class VoxelPaletteEditor
             foreach (TMP_Text text in inventory.container.GetComponentsInChildren<TMP_Text>(true))
                 if (text.text.StartsWith("TAB / ESC"))
                 {
-                    text.text = "TAB / ESC  Close     1-6  Assign     ENTER  Equip     Q  Drop\nPlaying: RMB  Place     LMB  Remove     F5  Save structures     F9  Load";
+                    text.text = "TAB / ESC  Close     1-6  Assign     ENTER  Equip     Q  Drop\nPlaying: RMB  Place     LMB  Remove     F5  Save ship or world     F9  Load world";
                     text.fontSize = 12f;
                     text.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 32f);
                 }

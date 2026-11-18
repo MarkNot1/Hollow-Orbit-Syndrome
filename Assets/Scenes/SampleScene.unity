@@ -3495,6 +3495,7 @@ MonoBehaviour:
   prefabDatabase: {fileID: 11400000, guid: e6f15b4c54194295830ca31a88f51687, type: 2}
   framePreviewMaterial: {fileID: 2100000, guid: ba748057139c53f49a045637cb9fdb53, type: 2}
   world: {fileID: 0}
+  builtInShipLibrary: {fileID: 4900000, guid: 39d72074ebfa451996f76829f3f4b86a, type: 3}
 --- !u!4 &1539610452
 Transform:
   m_ObjectHideFlags: 0
@@ -5054,7 +5055,7 @@ MonoBehaviour:
   m_text: 'TAB / ESC  Close     1-6  Assign     ENTER  Equip     Q  Drop
 
     Playing:
-    RMB  Place     LMB  Remove     F5  Save structures     F9  Load'
+    RMB  Place     LMB  Remove     F5  Save ship or world     F9  Load world'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}

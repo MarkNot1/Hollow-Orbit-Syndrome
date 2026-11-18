@@ -160,7 +160,11 @@ public class PlayerInput : MonoBehaviour
             return;
         }
 
-        if (saveStructuresAction != null && saveStructuresAction.WasPressedThisFrame()) structures?.SaveStructures();
+        if (saveStructuresAction != null && saveStructuresAction.WasPressedThisFrame())
+        {
+            SaveShipOrWorld();
+            if (gameplayInputBlocked) return;
+        }
         if (loadStructuresAction != null && loadStructuresAction.WasPressedThisFrame()) structures?.LoadStructures();
 
         if (_moveAction != null)
@@ -202,6 +206,14 @@ public class PlayerInput : MonoBehaviour
         MousePosition = Vector2.zero;
         IsJumping = false;
         RunningPressed = false;
+    }
+
+    private void SaveShipOrWorld()
+    {
+        if (structures == null) return;
+        if (TryGetReticleHit(out RaycastHit hit) && hit.collider.GetComponentInParent<VoxelStructure>() is { HasMasterFrame: true } ship &&
+            FindFirstObjectByType<Inventory>() is { } inventory && inventory.OpenShipSave(ship)) return;
+        structures.SaveStructures();
     }
 
     public bool IsCircuitDetailsPressed()

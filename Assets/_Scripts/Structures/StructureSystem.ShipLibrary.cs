@@ -5,32 +5,105 @@ using UnityEngine;
 
 public sealed partial class StructureSystem
 {
+    public const int MaxShipNameLength = 48;
+    [SerializeField] private TextAsset builtInShipLibrary;
+    private List<StructureData> builtInShips;
     public StructureData SelectedShip { get; private set; }
     private Bounds[] attachmentBounds = Array.Empty<Bounds>();
     private Vector3Int shipMin, shipMax;
 
+    public IReadOnlyList<StructureData> ReadBuiltInShips() => builtInShips ??=
+        builtInShipLibrary == null ? new List<StructureData>() : ParseShipLibrary(builtInShipLibrary.text);
+
     public List<StructureData> ReadSavedShips(string path = null)
     {
         path ??= SavePath;
-        Dictionary<string, StructureData> ships = new(StringComparer.Ordinal);
-        foreach (string file in new[] { path, path + ".library" })
+        string library = path + ".library";
+        string file = File.Exists(library) ? library : path;
+        return File.Exists(file) ? ParseShipLibrary(File.ReadAllText(file)) : new List<StructureData>();
+    }
+
+    private List<StructureData> ParseShipLibrary(string json)
+    {
+        StructureSaveData saved = JsonUtility.FromJson<StructureSaveData>(json);
+        if (saved == null || saved.version != 1 || saved.structures == null)
+            throw new InvalidDataException("Unsupported ship library format.");
+        HashSet<string> ids = new(StringComparer.Ordinal);
+        foreach (StructureData ship in saved.structures)
         {
-            if (!File.Exists(file)) continue;
-            StructureSaveData saved = JsonUtility.FromJson<StructureSaveData>(File.ReadAllText(file));
-            if (saved == null || saved.version != 1 || saved.structures == null)
-                throw new InvalidDataException("Unsupported ship library format.");
-            HashSet<string> ids = new(StringComparer.Ordinal);
-            foreach (StructureData ship in saved.structures)
-            {
-                Validate(ship, prefabDatabase);
-                if (string.IsNullOrWhiteSpace(ship.id) || !ids.Add(ship.id))
-                    throw new InvalidDataException("Ship IDs must be present and unique.");
-                if (ship.hasMasterFrame) ships[ship.id] = ship;
-            }
+            Validate(ship, prefabDatabase);
+            if (string.IsNullOrWhiteSpace(ship.id) || !ids.Add(ship.id))
+                throw new InvalidDataException("Ship IDs must be present and unique.");
         }
-        List<StructureData> result = new(ships.Values);
-        result.Sort((a, b) => { int name = string.CompareOrdinal(a.name, b.name); return name != 0 ? name : string.CompareOrdinal(a.id, b.id); });
-        return result;
+        saved.structures.RemoveAll(ship => !ship.hasMasterFrame);
+        saved.structures.Sort((a, b) =>
+        {
+            int name = string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase);
+            return name != 0 ? name : string.CompareOrdinal(a.id, b.id);
+        });
+        return saved.structures;
+    }
+
+    public void SaveShip(VoxelStructure ship, string name, string path = null)
+    {
+        if (ship == null || !ship.HasMasterFrame || !ship.transform.IsChildOf(transform))
+            throw new InvalidOperationException("Aim at a master-frame ship to save it.");
+        name = ValidateShipName(name);
+        StructureData snapshot = ship.Capture();
+        snapshot.name = name;
+        snapshot.position = Vector3.zero;
+        snapshot.rotation = Quaternion.identity;
+        Validate(snapshot, prefabDatabase);
+        path ??= SavePath;
+        List<StructureData> ships = ReadSavedShips(path);
+        int index = ships.FindIndex(s => s.id == snapshot.id);
+        if (index < 0) ships.Add(snapshot); else ships[index] = snapshot;
+        WriteShipLibrary(path, ships);
+        ship.name = name;
+        UpdateSelectedSave(snapshot.id, snapshot);
+    }
+
+    public bool RenameSavedShip(string id, string name, string path = null)
+    {
+        name = ValidateShipName(name);
+        path ??= SavePath;
+        List<StructureData> ships = ReadSavedShips(path);
+        StructureData ship = ships.Find(s => s.id == id);
+        if (ship == null) return false;
+        ship.name = name;
+        WriteShipLibrary(path, ships);
+        UpdateSelectedSave(id, ship);
+        return true;
+    }
+
+    public bool DeleteSavedShip(string id, string path = null)
+    {
+        path ??= SavePath;
+        List<StructureData> ships = ReadSavedShips(path);
+        int index = ships.FindIndex(s => s.id == id);
+        if (index < 0) return false;
+        ships.RemoveAt(index);
+        WriteShipLibrary(path, ships);
+        UpdateSelectedSave(id, null);
+        return true;
+    }
+
+    private static string ValidateShipName(string name)
+    {
+        name = name?.Trim();
+        if (string.IsNullOrEmpty(name) || name.Length > MaxShipNameLength)
+            throw new ArgumentException($"Use a ship name between 1 and {MaxShipNameLength} characters.");
+        foreach (char character in name)
+            if (char.IsControl(character)) throw new ArgumentException("Use a single-line ship name.");
+        return name;
+    }
+
+    private static void WriteShipLibrary(string path, List<StructureData> ships) =>
+        WriteSnapshot(path + ".library", JsonUtility.ToJson(new StructureSaveData { structures = ships }, true));
+
+    private void UpdateSelectedSave(string id, StructureData replacement)
+    {
+        if (SelectedShip?.id == id && builtInShips?.Contains(SelectedShip) != true) SelectSavedShip(replacement);
     }
 
     public void SelectSavedShip(StructureData ship)

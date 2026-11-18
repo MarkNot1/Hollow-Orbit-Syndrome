@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,13 +17,16 @@ public sealed class InventoryMenu : MonoBehaviour
     private Inventory inventory;
     private int firstVisible = -1;
     private StructureSystem structures;
-    private List<StructureData> ships = new();
-    private int selectedShip;
-    private string shipMessage;
-    private Button itemsTab, devTab;
+    private readonly List<StructureData> ships = new();
+    private int selectedShip, builtInCount;
+    private VoxelStructure shipToSave;
+    private string saveToRename, deleteConfirmation, shipMessage;
+    private Button itemsTab, devTab, renameButton, deleteButton;
+    private TMP_InputField shipName;
     private TMP_Text controls;
     private string itemControls;
     public bool IsDevTab { get; private set; }
+    public bool IsEditingShip => shipName != null && shipName.gameObject.activeSelf;
     public bool IsPlacingShip => structures != null && structures.SelectedShip != null;
     private int RowCount => IsDevTab ? ships.Count : inventory.Items.Count;
     public ItemSO HoveredItem
@@ -43,10 +47,17 @@ public sealed class InventoryMenu : MonoBehaviour
         controls = scroll.transform.parent.parent.Find("Controls")?.GetComponent<TMP_Text>();
         itemControls = controls != null ? controls.text : "";
         equipButton.onClick.AddListener(ActivateSelected);
-        dropButton.onClick.AddListener(() => { if (IsDevTab) SaveDevShips(); else inventory.DropSelected(); });
+        dropButton.onClick.AddListener(() =>
+        {
+            if (IsEditingShip) { Closed(); Refresh(); }
+            else if (IsDevTab) SaveDevShips();
+            else inventory.DropSelected();
+        });
         scroll.onValueChanged.AddListener(_ => RefreshRows(false));
         itemsTab = CreateTab("ITEMS", -170, false);
-        devTab = CreateTab("DEV SHIPS", -18, true);
+        devTab = CreateTab("SHIP LIBRARY", -18, true);
+        renameButton = CreateShipButton(equipButton, "RENAME SAVE", RenameSelected);
+        deleteButton = CreateShipButton(dropButton, "DELETE SAVE", DeleteSelected);
     }
 
     private Button CreateTab(string label, float x, bool dev)
@@ -65,6 +76,7 @@ public sealed class InventoryMenu : MonoBehaviour
 
     public void ShowDevTab(bool dev)
     {
+        Closed();
         IsDevTab = dev;
         CancelShipPlacement();
         scroll.StopMovement();
@@ -79,17 +91,33 @@ public sealed class InventoryMenu : MonoBehaviour
         if (IsDevTab) ReloadShips();
     }
 
-    private void ReloadShips()
+    public void Closed()
     {
-        string id = selectedShip < ships.Count ? ships[selectedShip].id : null;
-        shipMessage = "No saved ships yet.\n\nBuild a master-frame ship,\nthen press F5 or SAVE ALL.";
+        shipToSave = null;
+        saveToRename = deleteConfirmation = shipMessage = null;
+        if (shipName != null) shipName.gameObject.SetActive(false);
+    }
+
+    private void ReloadShips(string localId = null)
+    {
+        string id = localId ?? (selectedShip < ships.Count ? ships[selectedShip].id : null);
+        bool preferLocal = localId != null || selectedShip >= builtInCount;
+        shipMessage = null;
+        ships.Clear();
+        builtInCount = selectedShip = 0;
+        if (structures == null) structures = FindFirstObjectByType<StructureSystem>();
+        if (structures == null) return;
         try
         {
-            if (structures == null) structures = FindFirstObjectByType<StructureSystem>();
-            ships = structures != null ? structures.ReadSavedShips() : new List<StructureData>();
-            selectedShip = Mathf.Max(0, ships.FindIndex(s => s.id == id));
+            ships.AddRange(structures.ReadBuiltInShips());
+            builtInCount = ships.Count;
         }
-        catch (System.Exception error) { ships.Clear(); selectedShip = 0; shipMessage = "Cannot read ships: " + error.Message; }
+        catch (Exception error) { shipMessage = "Cannot load built-in ships. " + error.Message; }
+        try { ships.AddRange(structures.ReadSavedShips()); }
+        catch (Exception error) { shipMessage = "Cannot load local saves. " + error.Message; }
+        int start = preferLocal ? builtInCount : 0, end = preferLocal ? ships.Count : builtInCount;
+        for (int i = start; i < end; i++)
+            if (ships[i].id == id) { selectedShip = i; break; }
     }
 
     public void CancelShipPlacement() { if (structures != null) structures.SelectSavedShip(null); }
@@ -97,6 +125,7 @@ public sealed class InventoryMenu : MonoBehaviour
     public void ActivateSelected()
     {
         if (!IsDevTab) { inventory.EquipSelected(); return; }
+        if (IsEditingShip) { SubmitShipName(); return; }
         if (structures == null || ships.Count == 0) return;
         structures.SelectSavedShip(ships[selectedShip]);
         inventory.SetOpen(false);
@@ -104,9 +133,106 @@ public sealed class InventoryMenu : MonoBehaviour
 
     public void SaveDevShips()
     {
-        if (structures == null) return;
-        try { structures.SaveToFile(structures.SavePath); ReloadShips(); Refresh(); }
-        catch (System.Exception error) { itemDescription.text = "Save failed: " + error.Message; }
+        if (structures == null || IsEditingShip) return;
+        deleteConfirmation = null;
+        try { structures.SaveToFile(structures.SavePath); ReloadShips(); shipMessage ??= "World ships saved. F9 to load."; }
+        catch (Exception error) { shipMessage = "World save failed. " + error.Message; }
+        Refresh();
+    }
+
+    public void BeginShipSave(VoxelStructure ship)
+    {
+        ShowDevTab(true);
+        shipToSave = ship;
+        int index = ships.FindIndex(builtInCount, entry => entry.id == ship.Id);
+        EditShipName(index < 0 ? ship.name : ships[index].name);
+    }
+
+    private void RenameSelected()
+    {
+        if (selectedShip < builtInCount || selectedShip >= ships.Count) return;
+        saveToRename = ships[selectedShip].id;
+        EditShipName(ships[selectedShip].name);
+    }
+
+    private void EditShipName(string name)
+    {
+        deleteConfirmation = shipMessage = null;
+        if (shipName == null)
+        {
+            GameObject field = TMP_DefaultControls.CreateInputField(default);
+            field.name = "Ship name";
+            RectTransform rect = (RectTransform)field.transform;
+            rect.SetParent(itemDescription.transform.parent, false);
+            rect.anchorMin = rect.pivot = Vector2.zero;
+            rect.anchorMax = Vector2.right;
+            rect.anchoredPosition = Vector2.up * 42f;
+            rect.sizeDelta = new Vector2(0f, 34f);
+            shipName = field.GetComponent<TMP_InputField>();
+            Image background = field.GetComponent<Image>();
+            background.color = new Color(.06f, .14f, .1f);
+            shipName.targetGraphic = background;
+            shipName.characterLimit = StructureSystem.MaxShipNameLength;
+            shipName.fontAsset = itemDescription.font;
+            shipName.richText = false;
+            shipName.textComponent.color = itemDescription.color;
+            ((TMP_Text)shipName.placeholder).text = "Ship name";
+        }
+        shipName.gameObject.SetActive(true);
+        shipName.text = name;
+        Refresh();
+        shipName.Select();
+        shipName.ActivateInputField();
+    }
+
+    private void SubmitShipName()
+    {
+        string id = saveToRename ?? (shipToSave != null ? shipToSave.Id : null);
+        try
+        {
+            if (saveToRename == null) structures.SaveShip(shipToSave, shipName.text);
+            else if (!structures.RenameSavedShip(id, shipName.text)) throw new InvalidOperationException("This save is no longer available.");
+            Closed();
+            ReloadShips(id);
+            shipMessage ??= "Ship saved locally.";
+        }
+        catch (Exception error) { shipMessage = error.Message; }
+        Refresh();
+    }
+
+    private void DeleteSelected()
+    {
+        if (selectedShip < builtInCount || selectedShip >= ships.Count) return;
+        string id = ships[selectedShip].id;
+        if (deleteConfirmation != id)
+        {
+            deleteConfirmation = id;
+            shipMessage = "Confirm deletion of this local save. Placed ships stay in the world.";
+        }
+        else
+        {
+            deleteConfirmation = null;
+            try
+            {
+                bool deleted = structures.DeleteSavedShip(id);
+                ReloadShips();
+                shipMessage ??= deleted ? "Local save deleted." : "This save is already gone.";
+            }
+            catch (Exception error) { shipMessage = "Delete failed. " + error.Message; }
+        }
+        Refresh();
+    }
+
+    private static Button CreateShipButton(Button source, string label, UnityEngine.Events.UnityAction onClick)
+    {
+        Button button = Instantiate(source, source.transform.parent);
+        button.name = label;
+        button.onClick = new Button.ButtonClickedEvent();
+        button.onClick.AddListener(onClick);
+        button.GetComponentInChildren<TMP_Text>().text = label;
+        ((RectTransform)button.transform).anchoredPosition += Vector2.up * 42f;
+        button.gameObject.SetActive(false);
+        return button;
     }
 
     public void Refresh()
@@ -122,21 +248,29 @@ public sealed class InventoryMenu : MonoBehaviour
         Color selected = new(.2f, .5f, .32f, 1), idle = new(.08f, .18f, .12f, 1);
         itemsTab.image.color = IsDevTab ? idle : selected;
         devTab.image.color = IsDevTab ? selected : idle;
+        bool editing = IsEditingShip;
         if (controls != null) controls.text = IsDevTab
-            ? "TAB / ESC Close   UP/DOWN Select   ENTER Preview   F5 Save all\nPlaying: RMB Paste   ESC Cancel   1-6 Build"
+            ? editing ? "ENTER Save name   TAB / ESC Close" : "TAB / ESC Close   UP/DOWN Select   ENTER Preview\nAim at a ship and press F5 to save it. F9 loads world ships."
             : itemControls;
-        equipButton.GetComponentInChildren<TMP_Text>().text = IsDevTab ? "PLACE COPY" : "EQUIP";
-        dropButton.GetComponentInChildren<TMP_Text>().text = IsDevTab ? "SAVE ALL" : "DROP";
+        equipButton.GetComponentInChildren<TMP_Text>().text = !IsDevTab ? "EQUIP" : !editing ? "PLACE COPY" : saveToRename == null ? "SAVE SHIP" : "RENAME";
+        dropButton.GetComponentInChildren<TMP_Text>().text = !IsDevTab ? "DROP" : editing ? "CANCEL" : "SAVE WORLD";
+        bool local = IsDevTab && !editing && selectedShip >= builtInCount && selectedShip < ships.Count;
+        renameButton.gameObject.SetActive(local);
+        deleteButton.gameObject.SetActive(local);
+        if (local) deleteButton.GetComponentInChildren<TMP_Text>().text = deleteConfirmation == null ? "DELETE SAVE" : "CONFIRM DELETE";
+        itemTitle.richText = itemDescription.richText = !IsDevTab;
         if (IsDevTab)
         {
             StructureData ship = ships.Count > 0 ? ships[selectedShip] : null;
-            itemTitle.text = ship?.name ?? "Saved ships";
-            itemCount.text = ship == null ? "" : $"{ship.voxels.Count} voxels / {ship.prefabs.Count} attachments";
-            itemDescription.text = ship == null ? shipMessage : $"ID: {ship.id}\n\nRMB: place   Esc: cancel\n1-6: build   F5 / SAVE ALL: save\nSelect the edited entry to copy it.\nEach copy gets a new ID.";
+            itemTitle.text = editing ? "Ship name" : ship?.name ?? "Ship library";
+            itemCount.text = ship == null || editing ? "" : $"{(local ? "MY SAVE" : "BUILT-IN")}  •  {ship.voxels.Count} voxels";
+            itemDescription.text = shipMessage ?? (editing ? "Enter a name for this local save." : ship == null
+                ? "Aim at a master-frame ship and press F5 to save it."
+                : "Place a copy with right click. Press Esc to cancel.");
             itemIcon.enabled = false;
             emptyMessage.SetActive(false);
-            equipButton.interactable = ship != null;
-            dropButton.interactable = structures != null;
+            equipButton.interactable = editing || ship != null;
+            dropButton.interactable = editing || structures != null;
             return;
         }
         ItemSO item = inventory.SelectedItem;
@@ -177,8 +311,7 @@ public sealed class InventoryMenu : MonoBehaviour
             if (IsDevTab)
             {
                 StructureData ship = ships[index];
-                rows[i].BindShip(inventory, $"{ship.name}  [{ship.id.Substring(0, Mathf.Min(8, ship.id.Length))}]",
-                    () => { selectedShip = index; Refresh(); });
+                rows[i].BindShip(inventory, this, index, $"{(index < builtInCount ? "Built-in" : "My save")}  ·  {ship.name}");
                 rows[i].SetSelected(index == selectedShip);
                 continue;
             }
@@ -195,12 +328,12 @@ public sealed class InventoryMenu : MonoBehaviour
 
     public void MoveSelection(int direction)
     {
-        if (RowCount == 0) return;
+        if (RowCount == 0 || IsEditingShip) return;
         int index = IsDevTab ? selectedShip : 0;
         for (int i = 0; !IsDevTab && i < inventory.Items.Count; i++)
             if (inventory.Items[i].Item == inventory.SelectedItem) { index = i; break; }
         index = Mathf.Clamp(index + direction, 0, RowCount - 1);
-        if (IsDevTab) { selectedShip = index; Refresh(); }
+        if (IsDevTab) SelectShip(index);
         else inventory.SelectItem(inventory.Items[index].Item);
         Vector2 position = scroll.content.anchoredPosition;
         float top = index * RowHeight;
@@ -210,5 +343,13 @@ public sealed class InventoryMenu : MonoBehaviour
         scroll.StopMovement();
         scroll.content.anchoredPosition = position;
         RefreshRows(true);
+    }
+
+    internal void SelectShip(int index)
+    {
+        if (IsEditingShip) return;
+        selectedShip = index;
+        deleteConfirmation = shipMessage = null;
+        Refresh();
     }
 }

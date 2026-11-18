@@ -14,7 +14,8 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
     private TextMeshProUGUI amountTxt;
     private Inventory inventory;
     private int hotbarIndex = -1;
-    private System.Action selectRow;
+    private InventoryMenu shipMenu;
+    private int shipIndex;
 
     private void Awake() => CacheReferences();
     private void CacheReferences()
@@ -31,17 +32,19 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
 
     public void Bind(Inventory owner, ItemSO item, int amount, int shortcutIndex = -1)
     {
-        selectRow = null;
+        shipMenu = null;
         inventory = owner;
         hotbarIndex = shortcutIndex;
         SetItem(item, amount);
     }
 
-    public void BindShip(Inventory owner, string label, System.Action select)
+    public void BindShip(Inventory owner, InventoryMenu menu, int index, string label)
     {
         Bind(owner, null, 0);
+        itemNameText.richText = false;
         itemNameText.text = label;
-        selectRow = select;
+        shipMenu = menu;
+        shipIndex = index;
     }
 
     public void SetItem(ItemSO item, int amount = 1)
@@ -58,7 +61,11 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
         iconImage.sprite = heldItem != null ? heldItem.itemIcon : null;
         amountTxt.text = heldItem == null ? "" : heldItem.unlimited ? "∞" : itemAmount.ToString();
         iconImage.preserveAspect = true;
-        if (itemNameText != null) itemNameText.text = heldItem != null ? heldItem.itemName : "";
+        if (itemNameText != null)
+        {
+            itemNameText.richText = true;
+            itemNameText.text = heldItem != null ? heldItem.itemName : "";
+        }
     }
 
     public void SetSelected(bool selected, float selectedAlpha = 0.22f, float normalAlpha = 0.04f)
@@ -76,7 +83,7 @@ public class Slot : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IP
     public void OnPointerClick(PointerEventData eventData)
     {
         if (inventory == null || !inventory.IsOpen || eventData.button != PointerEventData.InputButton.Left) return;
-        if (selectRow != null) { selectRow(); return; }
+        if (shipMenu != null) { shipMenu.SelectShip(shipIndex); return; }
         if (hotbarIndex >= 0) inventory.SelectHotbar(hotbarIndex);
         else inventory.SelectItem(heldItem);
     }

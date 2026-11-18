@@ -73,9 +73,30 @@ public sealed class VoxelStructure : MonoBehaviour
         if (chunk == null || chunk.Structure != this) return false;
         Vector3 localNormal = transform.InverseTransformDirection(hit.normal);
         normal = VoxelMetrics.FaceNormal(localNormal);
-        surface = Vector3Int.RoundToInt(transform.InverseTransformPoint(hit.point) / VoxelMetrics.Size - localNormal * 0.01f);
-        return normal != Vector3Int.zero && GetVoxel(surface) != VoxelType.Air;
+        if (normal == Vector3Int.zero) return false;
+        Vector3 cell = transform.InverseTransformPoint(hit.point) / VoxelMetrics.Size - (Vector3)normal * 0.01f;
+        surface = Vector3Int.RoundToInt(cell);
+        if (HasHitFace(chunk, surface, normal)) return true;
+
+        // At a seam, rounding can pick the empty cell beside the face that was hit.
+        Vector3Int corner = surface;
+        for (int axis = 0; axis < 3; axis++)
+        {
+            float delta = cell[axis] - surface[axis];
+            if (normal[axis] != 0 || Mathf.Abs(delta) < 0.495f) continue;
+            Vector3Int adjacent = surface;
+            adjacent[axis] += delta < 0f ? -1 : 1;
+            if (HasHitFace(chunk, adjacent, normal)) { surface = adjacent; return true; }
+            corner[axis] = adjacent[axis];
+        }
+        if (corner == surface || !HasHitFace(chunk, corner, normal)) return false;
+        surface = corner;
+        return true;
     }
+
+    private bool HasHitFace(StructureChunk chunk, Vector3Int cell, Vector3Int normal) =>
+        chunk.Voxels.TryGetValue(cell - chunk.Origin, out VoxelType type) &&
+        VoxelRuntimeData.IsFaceVisible(type, GetVoxel(cell + normal));
 
     public bool TryPlaceVoxel(RaycastHit hit, VoxelType type)
     {

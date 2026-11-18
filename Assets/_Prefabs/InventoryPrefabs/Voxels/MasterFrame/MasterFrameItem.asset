@@ -17,9 +17,8 @@ MonoBehaviour:
   maxStackSize: 0
   itemPrefab: {fileID: 0}
   handItemPrefab: {fileID: 5904550674173563664, guid: c7606c145ae7c244bbe6f1130dab2e2b, type: 3}
-  description: Starts a structure at local (0, 0, 0). Its 6 x 6 x 6 metal border
-    cannot be removed. Orange stripes mark the centre pair of each bottom edge. F5
-    saves; F9 loads.
+  description: Starts a structure with a protected 6 x 6 x 6 metal border. Aim at
+    the ship and press F5 to name and save it to the Ship Library.
   placementKind: 3
   voxelType: 2
   specialPrefabId: 
